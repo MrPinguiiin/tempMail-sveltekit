@@ -13,7 +13,7 @@ export interface TempEmail {
   address: string;
   prefix: string;
   createdAt: Date;
-  messages: EmailMessage[];
+  messages: EmailLog[];
 }
 
 export interface EmailLog {

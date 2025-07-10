@@ -3,7 +3,7 @@
 	import EmailList from '$lib/components/EmailList.svelte';
 	import MessageList from '$lib/components/MessageList.svelte';
 	import { Toaster, toast } from 'svelte-sonner';
-	import type { TempEmail } from '$lib/types';
+	import type { EmailLog, TempEmail } from '$lib/types';
 
 	let emails: TempEmail[] = $state([]);
 	let activeEmailId: string | null = $state(null);
@@ -17,7 +17,6 @@
 	function handleEmailSelect(event: CustomEvent<string>) {
 		activeEmailId = event.detail;
 	}
-
     
 	function handleEmailDelete(event: CustomEvent<string>) {
 		const emailId = event.detail;
@@ -28,6 +27,16 @@
 		toast.success('Deleted', {
 			description: 'Email address deleted successfully'
 		});
+	}
+
+	function handleLogsUpdated(event: CustomEvent<{ emailId: string; logs: EmailLog[] }>) {
+		const { emailId, logs } = event.detail;
+		const emailIndex = emails.findIndex((e) => e.id === emailId);
+		if (emailIndex !== -1) {
+			const updatedEmails = [...emails];
+			updatedEmails[emailIndex] = { ...updatedEmails[emailIndex], messages: logs };
+			emails = updatedEmails;
+		}
 	}
 
 	const activeEmailData = $derived(emails.find((email) => email.id === activeEmailId) || null);
@@ -55,7 +64,7 @@
 
 			<!-- Right Panel - Message List -->
 			<div class="lg:col-span-2">
-				<MessageList activeEmail={activeEmailData} />
+				<MessageList activeEmail={activeEmailData} on:logsUpdated={handleLogsUpdated} />
 			</div>
 		</div>
 	</div>

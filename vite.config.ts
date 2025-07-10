@@ -8,6 +8,6 @@ export default defineConfig({
 		host: '0.0.0.0',
 		port: 5173,
 		strictPort: false,
-		allowedHosts: ['*', 'cork-exclusive-rhythm-tutorials.trycloudflare.com']
+		allowedHosts: ['*', '.trycloudflare.com']
 	}
 });

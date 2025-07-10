@@ -8,11 +8,11 @@
     async function checkInbox() {
       const response = await fetch(`/api/inbox?email=${tempEmail}`);
       const newEmails = await response.json();
-      inbox = newEmails;
+      inbox = newEmails as any[];
     }
-  
+    
     onMount(() => {
-      interval = setInterval(checkInbox, 3000);
+      interval = setInterval(checkInbox, 3000) as any;
     });
     
     onDestroy(() => {
