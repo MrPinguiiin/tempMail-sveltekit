@@ -3,8 +3,13 @@
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import type { EmailLog, TempEmail } from '$lib/types';
 	import { ArrowLeft, RefreshCw } from 'lucide-svelte';
+	import { createEventDispatcher } from 'svelte';
 
 	let { activeEmail }: { activeEmail: TempEmail | null } = $props();
+
+	const dispatch = createEventDispatcher<{
+		logsUpdated: { emailId: string; logs: EmailLog[] };
+	}>();
 
 	let logs: EmailLog[] = $state([]);
 	let isLoading = $state(false);
@@ -29,6 +34,7 @@
 
 			if (activeEmail?.address === emailToFetch.address) {
 				logs = newLogs;
+				dispatch('logsUpdated', { emailId: emailToFetch.id, logs: newLogs });
 			}
 		} catch (e) {
 			if (activeEmail?.address === emailToFetch.address) {
