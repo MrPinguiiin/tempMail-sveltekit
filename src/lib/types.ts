@@ -17,12 +17,11 @@ export interface TempEmail {
 }
 
 export interface EmailLog {
-  datetime: string;
-  id: string;
-  messageId: string;
-  from: string;
-  to: string;
-  subject: string;
-  status: string;
-  action: string;
+	id: string;
+	from: { address: string; name: string } | string;
+	to: { address: string; name: string }[] | string;
+	subject: string;
+	html: string;
+	text: string;
+	date: string;
 } 
