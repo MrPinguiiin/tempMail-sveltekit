@@ -1,13 +1,32 @@
-// File: src/routes/api/inbox/+server.js
-
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import {
 	CLOUDFLARE_ACCOUNT_ID,
 	KV_NAMESPACE_ID,
-	CLOUDFLARE_API_TOKEN
+	CLOUDFLARE_API_TOKEN,
+	DATABASE_ID
 } from '$env/static/private';
-import Cloudflare from 'cloudflare';
+
+// Simple retry function
+async function retryWithBackoff<T>(
+	fn: () => Promise<T>,
+	maxRetries: number = 3,
+	baseDelay: number = 1000
+): Promise<T> {
+	for (let i = 0; i < maxRetries; i++) {
+		try {
+			return await fn();
+		} catch (error: any) {
+			if (error.status === 429 && i < maxRetries - 1) {
+				const delay = baseDelay * Math.pow(2, i);
+				await new Promise(resolve => setTimeout(resolve, delay));
+				continue;
+			}
+			throw error;
+		}
+	}
+	throw new Error('Max retries exceeded');
+}
 
 async function fetchFromKv(kv: KVNamespace, prefix: string) {
 	const list = await kv.list({ prefix });
@@ -26,6 +45,108 @@ async function fetchFromKv(kv: KVNamespace, prefix: string) {
 	return filteredEmails;
 }
 
+// Function to fetch emails from D1 Database
+async function fetchFromD1(db: D1Database, email: string) {
+	const result = await db.prepare(`
+		SELECT 
+			id, to_address, from_address, from_name, subject,
+			html_content, text_content, attachments, date_received
+		FROM emails 
+		WHERE to_address = ? AND is_deleted = FALSE
+		ORDER BY date_received DESC
+	`).bind(email).all();
+
+	return result.results.map((row: any) => ({
+		id: row.id,
+		from: {
+			address: row.from_address,
+			name: row.from_name
+		},
+		to: row.to_address,
+		subject: row.subject,
+		html: row.html_content,
+		text: row.text_content,
+		attachments: JSON.parse(row.attachments || '[]'),
+		date: row.date_received
+	}));
+}
+
+// Optimized function to fetch from KV API with better rate limiting
+async function fetchFromKvAPI(
+	baseUrl: string,
+	headers: Record<string, string>,
+	prefix: string
+) {
+	try {
+		// Use more conservative retry with longer delays
+		const listResponse = await retryWithBackoff(async () => {
+			const response = await fetch(`${baseUrl}/keys?prefix=${encodeURIComponent(prefix)}&limit=20`, { 
+				headers: {
+					...headers,
+					'User-Agent': 'tempMail/1.0'
+				}
+			});
+			if (!response.ok) {
+				if (response.status === 429) {
+					const retryAfter = response.headers.get('Retry-After');
+					if (retryAfter) {
+						console.log(`Rate limited, waiting ${retryAfter} seconds`);
+						await new Promise(resolve => setTimeout(resolve, parseInt(retryAfter) * 1000));
+					}
+				}
+				throw { status: response.status, message: 'Failed to list keys' };
+			}
+			return response;
+		}, 5, 2000); // 5 retries with 2 second base delay
+
+		const keysResult = await listResponse.json() as { result: { name: string }[] };
+		
+		if (keysResult.result.length === 0) {
+			return [];
+		}
+
+		// Fetch only first 10 emails to reduce API calls
+		const emails = [];
+		for (const key of keysResult.result.slice(0, 10)) {
+			try {
+				const valueResponse = await retryWithBackoff(async () => {
+					const response = await fetch(`${baseUrl}/values/${encodeURIComponent(key.name)}`, { 
+						headers: {
+							...headers,
+							'User-Agent': 'tempMail/1.0'
+						}
+					});
+					if (!response.ok) {
+						if (response.status === 429) {
+							const retryAfter = response.headers.get('Retry-After');
+							if (retryAfter) {
+								await new Promise(resolve => setTimeout(resolve, parseInt(retryAfter) * 1000));
+							}
+						}
+						throw { status: response.status, message: 'Failed to get value' };
+					}
+					return response;
+				}, 3, 1000);
+				
+				if (valueResponse.ok) {
+					const value = await valueResponse.text();
+					const email = JSON.parse(value);
+					emails.push(email);
+				}
+				
+				// Longer delay between requests to avoid rate limiting
+				await new Promise(resolve => setTimeout(resolve, 500));
+			} catch (err) {
+				console.warn(`Failed to fetch key ${key.name}:`, err);
+			}
+		}
+		
+		return emails.sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
+	} catch (error) {
+		console.error('Failed to fetch from KV API:', error);
+		return [];
+	}
+}
 export const GET: RequestHandler = async ({ url, platform }) => {
 	const email = url.searchParams.get('email');
 	if (!email) {
@@ -33,55 +154,140 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 	}
 
 	try {
-		// Jika berjalan di Cloudflare (Produksi), gunakan koneksi langsung
+		// Jika berjalan di Cloudflare (Produksi), gunakan D1 Database
+		const db = (platform?.env as any)?.INBOX_DB;
+		if (db) {
+			const emails = await fetchFromD1(db, email);
+			return json(emails);
+		}
+
 		const kv = platform?.env?.INBOX_KV;
 		if (kv) {
 			const emails = await fetchFromKv(kv, `${email}:`);
 			return json(emails);
 		}
 
-		// Jika berjalan di lokal (Development), gunakan API
-		if (dev) {
-			if (!CLOUDFLARE_ACCOUNT_ID || !KV_NAMESPACE_ID || !CLOUDFLARE_API_TOKEN) {
-				return json({ error: 'Kredensial Cloudflare tidak diatur di .env' }, { status: 500 });
+		// Untuk semua mode, gunakan D1 Database via HTTP API
+		try {
+			// Basic sanitization to prevent SQL injection
+			const sanitizedEmail = email.replace(/'/g, "''");
+			
+			// Use D1 HTTP API directly
+			const d1ApiUrl = `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query`;
+			
+			const query = `SELECT id, to_address, from_address, from_name, subject, html_content, text_content, attachments, date_received FROM emails WHERE to_address = '${sanitizedEmail}'`;
+			
+			const apiResponse = await retryWithBackoff(async () => {
+				const response = await fetch(d1ApiUrl, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+						'Content-Type': 'application/json',
+						'X-Account-ID': CLOUDFLARE_ACCOUNT_ID
+					},
+					body: JSON.stringify({
+						sql: query
+					})
+				});
+				
+				if (!response.ok) {
+					throw new Error(`D1 API error: ${response.status} ${response.statusText}`);
+				}
+				
+				return response;
+			}, 3, 1000);
+			
+			const apiData = await apiResponse.json() as any;
+			
+			if (apiData.success && apiData.result && Array.isArray(apiData.result)) {
+				const results = apiData.result[0]?.results || [];
+				
+				if (results.length > 0) {
+					const emails = results.map((row: any) => ({
+						id: row.id,
+						from: {
+							address: row.from_address,
+							name: row.from_name
+						},
+						to: row.to_address,
+						subject: row.subject,
+						html: row.html_content || '',
+						text: row.text_content || '',
+						attachments: JSON.parse(row.attachments || '[]'),
+						date: row.date_received
+					}));
+
+					return json(emails);
+				}
 			}
 			
-			const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}`;
-			const headers = {
-				'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`
-			};
-
-			const listResponse = await fetch(`${baseUrl}/keys?prefix=${encodeURIComponent(email + ':')}`, { headers });
-			if (!listResponse.ok) {
-				return json({ error: 'Gagal mengambil daftar kunci dari KV' }, { status: listResponse.status });
-			}
-			const keysResult = await listResponse.json() as { result: { name: string }[] };
-			
-			const emails = await Promise.all(
-				keysResult.result.map(async (key: { name: string }) => {
-					const valueResponse = await fetch(`${baseUrl}/values/${encodeURIComponent(key.name)}`, { headers });
-					if (!valueResponse.ok) return null;
-					const value = await valueResponse.text();
-					try {
-						return JSON.parse(value);
-					} catch {
-						return null;
-					}
-				})
-			);
-			
-			const filteredEmails = emails.filter((e): e is Record<string, unknown> => e !== null);
-
-			// Urutkan berdasarkan tanggal, terbaru lebih dulu
-			filteredEmails.sort((a: any, b: any) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
-
-			return json(filteredEmails);
+			return json([]);
+		} catch (error) {
+			console.log('Failed to access D1 Database via API:', error);
+			return json([]);
 		}
-		
+
 		return json({ error: 'Lingkungan tidak didukung' }, { status: 500 });
 
-	} catch (error) {
+	} catch (error: any) {
 		console.error('Gagal mengambil email:', error);
+		if (error.status === 429) {
+			return json({
+				error: 'Rate limit terlampaui. Silakan coba lagi dalam beberapa saat.',
+				retryAfter: 60
+			}, { status: 429 });
+		}
 		return json({ error: 'Gagal mengambil data dari server' }, { status: 500 });
+	}
+};
+
+// Add POST method for deleting emails
+export const POST: RequestHandler = async ({ request, url, platform }) => {
+	const email = url.searchParams.get('email');
+	if (!email) {
+		return json({ error: 'Parameter email diperlukan' }, { status: 400 });
+	}
+
+	const { emailId } = await request.json() as { emailId: string };
+	if (!emailId) {
+		return json({ error: 'Parameter emailId diperlukan' }, { status: 400 });
+	}
+
+	try {
+		// Jika berjalan di Cloudflare (Produksi), gunakan D1 Database
+		const db = (platform?.env as any)?.INBOX_DB;
+		if (db) {
+			await db.prepare(`
+				UPDATE emails 
+				SET is_deleted = TRUE 
+				WHERE id = ? AND to_address = ?
+			`).bind(emailId, email).run();
+			return json({ success: true });
+		}
+
+		// Fallback ke KV jika D1 tidak tersedia
+		const kv = platform?.env?.INBOX_KV;
+		if (kv) {
+			await kv.delete(`${email}:${emailId}`);
+			return json({ success: true });
+		}
+
+		if (dev) {
+			// For development, just return success
+			console.log(`Would delete email ${emailId} for ${email}`);
+			return json({ success: true });
+		}
+
+		return json({ error: 'Lingkungan tidak didukung' }, { status: 500 });
+
+	} catch (error: any) {
+		console.error('Gagal menghapus email:', error);
+		if (error.status === 429) {
+			return json({
+				error: 'Rate limit terlampaui. Silakan coba lagi dalam beberapa saat.',
+				retryAfter: 60
+			}, { status: 429 });
+		}
+		return json({ error: 'Gagal menghapus email' }, { status: 500 });
 	}
 };

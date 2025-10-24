@@ -2,80 +2,51 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import type { EmailLog, TempEmail } from '$lib/types';
-	import { ArrowLeft, RefreshCw } from 'lucide-svelte';
+	import { RefreshCw } from 'lucide-svelte';
 	import { createEventDispatcher } from 'svelte';
 
-	let { activeEmail }: { activeEmail: TempEmail | null } = $props();
+	let { activeEmail, selectedMessage }: {
+		activeEmail: TempEmail | null;
+		selectedMessage: EmailLog | null;
+	} = $props();
 
 	const dispatch = createEventDispatcher<{
-		logsUpdated: { emailId: string; logs: EmailLog[] };
+		messageSelect: EmailLog;
+		refresh: void;
 	}>();
 
-	let logs: EmailLog[] = $state([]);
+	let messages: EmailLog[] = $state([]);
 	let isLoading = $state(false);
-	let error: string | null = $state(null);
-	let selectedLog: EmailLog | null = $state(null);
 
-	async function fetchLogs() {
+	async function fetchMessages() {
 		const emailToFetch = activeEmail;
 		if (!emailToFetch) {
-			logs = [];
-			selectedLog = null;
+			messages = [];
 			return;
 		}
+
 		isLoading = true;
-		error = null;
 		try {
 			const response = await fetch(`/api/inbox?email=${emailToFetch.address}`);
 			if (!response.ok) {
 				throw new Error('Gagal mengambil pesan inbox.');
 			}
-			const newLogs: EmailLog[] = await response.json();
-
-			if (activeEmail?.address === emailToFetch.address) {
-				logs = newLogs;
-				dispatch('logsUpdated', { emailId: emailToFetch.id, logs: newLogs });
-			}
+			messages = await response.json();
 		} catch (e) {
-			if (activeEmail?.address === emailToFetch.address) {
-				if (e instanceof Error) {
-					error = e.message;
-				} else {
-					error = 'Terjadi kesalahan yang tidak diketahui.';
-				}
-			}
+			console.error('Error fetching messages:', e);
+			messages = [];
 		} finally {
-			if (activeEmail?.address === emailToFetch.address) {
-				isLoading = false;
-			}
+			isLoading = false;
 		}
 	}
 
 	$effect(() => {
-		let pollingInterval: ReturnType<typeof setInterval>;
-		selectedLog = null; // Reset tampilan detail saat email aktif berubah
-
 		if (activeEmail) {
-			fetchLogs();
-			pollingInterval = setInterval(fetchLogs, 3000);
+			fetchMessages();
 		} else {
-			logs = [];
+			messages = [];
 		}
-
-		return () => {
-			if (pollingInterval) {
-				clearInterval(pollingInterval);
-			}
-		};
 	});
-
-	function viewLog(log: EmailLog) {
-		selectedLog = log;
-	}
-
-	function backToList() {
-		selectedLog = null;
-	}
 
 	function getSender(from: EmailLog['from']): string {
 		if (typeof from === 'string') return from;
@@ -84,73 +55,78 @@
 		}
 		return 'Tidak diketahui';
 	}
+
+	function formatTime(date: string): string {
+		return new Date(date).toLocaleString('id-ID', {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
 </script>
 
-<Card class="h-full">
-	<CardHeader class="flex flex-row items-center justify-between border-b pb-4">
-		{#if selectedLog}
-			<div class="flex items-center gap-2">
-				<Button variant="ghost" size="icon" onclick={backToList}>
-					<ArrowLeft class="h-4 w-4" />
-				</Button>
-				<div class="min-w-0">
-					<CardTitle class="truncate">{selectedLog.subject}</CardTitle>
-					<CardDescription class="truncate">
-						Dari: {getSender(selectedLog.from)}
-					</CardDescription>
-				</div>
-			</div>
-		{:else}
-			<div>
-				<CardTitle>Inbox</CardTitle>
-				{#if activeEmail}
-					<CardDescription>{activeEmail.address}</CardDescription>
-				{/if}
-			</div>
-			<Button variant="outline" size="icon" onclick={fetchLogs} disabled={isLoading || !activeEmail}>
-				<RefreshCw class="h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+<Card class="h-full bg-white dark:bg-slate-950 flex flex-col border-slate-200 dark:border-slate-800">
+	<CardHeader class="border-b border-slate-200 dark:border-slate-800 p-6">
+		<div class="flex items-center justify-between mb-2">
+			<CardTitle class="text-slate-900 dark:text-white">Inbox</CardTitle>
+			<Button
+				size="sm"
+				variant="ghost"
+				class="h-8 w-8 p-0"
+				onclick={() => dispatch('refresh')}
+				disabled={isLoading}
+			>
+				<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
 			</Button>
+		</div>
+		{#if activeEmail}
+			<CardDescription class="text-slate-500 dark:text-slate-400 truncate">
+				{activeEmail.address}
+			</CardDescription>
 		{/if}
 	</CardHeader>
-	<CardContent class="p-0">
-		{#if selectedLog}
-			<iframe
-				title="Email Content"
-				srcdoc={selectedLog.html}
-				class="w-full h-[70vh] border-0"
-				sandbox="allow-same-origin"
-			></iframe>
-		{:else if isLoading && logs.length === 0}
-			<div class="flex items-center justify-center h-64 p-4">
-				<p class="text-gray-500">Memuat pesan...</p>
+
+	<CardContent class="flex-1 overflow-y-auto p-0">
+		{#if isLoading && messages.length === 0}
+			<div class="flex items-center justify-center h-full text-slate-500 dark:text-slate-400">
+				<p class="text-sm">Loading messages...</p>
 			</div>
-		{:else if error}
-			<div class="flex items-center justify-center h-64 p-4">
-				<p class="text-red-500">{error}</p>
-			</div>
-		{:else if !activeEmail}
-			<div class="flex items-center justify-center h-64 p-4">
-				<p class="text-gray-500">Pilih email untuk melihat pesan</p>
-			</div>
-		{:else if logs.length === 0}
-			<div class="flex items-center justify-center h-64 p-4">
-				<p class="text-gray-500">Tidak ada pesan untuk alamat ini.</p>
+		{:else if messages.length === 0}
+			<div class="flex items-center justify-center h-full text-slate-500 dark:text-slate-400">
+				<p class="text-sm">No messages yet</p>
 			</div>
 		{:else}
-			<div class="space-y-1 p-2">
-				{#each logs as log (log.id)}
-					<button
-						class="w-full text-left border p-3 rounded-lg hover:bg-gray-50"
-						onclick={() => viewLog(log)}
+			<div class="divide-y divide-slate-200 dark:divide-slate-800">
+				{#each messages as message (message.id)}
+					<div
+						onclick={() => dispatch('messageSelect', message)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								dispatch('messageSelect', message);
+							}
+						}}
+						role="button"
+						tabindex="0"
+						class="p-4 cursor-pointer transition-colors border-l-2 {
+							selectedMessage?.id === message.id
+								? 'bg-blue-50 dark:bg-blue-900/20 border-l-blue-600'
+								: 'bg-white dark:bg-slate-950 border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-900'
+						}"
 					>
-						<div class="flex items-center justify-between">
-							<p class="font-semibold">{getSender(log.from)}</p>
-							<p class="text-xs text-gray-500">
-								{new Date(log.date).toLocaleString()}
+						<div class="flex items-start justify-between gap-2 mb-1">
+							<p class="font-medium text-slate-900 dark:text-white text-sm">
+								{getSender(message.from)}
 							</p>
+							<span class="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+								{formatTime(message.date)}
+							</span>
 						</div>
-						<p class="text-sm font-medium truncate">{log.subject}</p>
-					</button>
+						<p class="text-sm text-slate-600 dark:text-slate-400 truncate">
+							{message.subject}
+						</p>
+					</div>
 				{/each}
 			</div>
 		{/if}

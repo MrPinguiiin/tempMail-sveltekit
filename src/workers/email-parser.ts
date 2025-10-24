@@ -2,6 +2,7 @@ import PostalMime from 'postal-mime';
 
 export interface Env {
 	INBOX_KV: KVNamespace;
+	INBOX_DB: D1Database;
 }
 
 export default {
@@ -24,24 +25,46 @@ export default {
 			
 			const date = parsedEmail.date || new Date().toISOString();
 			const fromAddress = typeof parsedEmail.from === 'string' ? parsedEmail.from : parsedEmail.from?.address || 'unknown';
+			const fromName = typeof parsedEmail.from === 'object' ? parsedEmail.from?.name : null;
 			const id = `${fromAddress}-${parsedEmail.subject}-${date}`;
-			const key = `${toAddress}:${id}`;
 
-			const storedValue = {
-				id: id,
-				from: parsedEmail.from,
-				to: parsedEmail.to,
-				subject: parsedEmail.subject,
-				html: parsedEmail.html,
-				text: parsedEmail.text,
-				attachments: parsedEmail.attachments,
-				date: date
-			};
-			
-			await env.INBOX_KV.put(key, JSON.stringify(storedValue), {
-				// Simpan email selama 30 hari
-				expirationTtl: 60 * 60 * 24 * 30
+			// Simpan ke D1 Database
+			await env.INBOX_DB.prepare(`
+				INSERT INTO emails (
+					id, to_address, from_address, from_name, subject, 
+					html_content, text_content, attachments, date_received
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`).bind(
+				id,
+				toAddress,
+				fromAddress,
+				fromName,
+				parsedEmail.subject,
+				parsedEmail.html,
+				parsedEmail.text,
+				JSON.stringify(parsedEmail.attachments || []),
+				date
+			).run();
+
+			// Fallback ke KV jika D1 gagal
+			try {
+				const storedValue = {
+					id: id,
+					from: parsedEmail.from,
+					to: parsedEmail.to,
+					subject: parsedEmail.subject,
+					html: parsedEmail.html,
+					text: parsedEmail.text,
+					attachments: parsedEmail.attachments,
+					date: date
+				};
+				
+			await env.INBOX_KV.put(`${toAddress}:${id}`, JSON.stringify(storedValue), {
+				expirationTtl: 60 * 60 * 24 * 1
 			});
+			} catch (kvError) {
+				console.warn('KV fallback failed:', kvError);
+			}
 
 		} catch (error) {
 			console.error('Gagal memproses email:', error);
