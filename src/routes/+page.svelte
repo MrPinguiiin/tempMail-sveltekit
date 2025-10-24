@@ -15,12 +15,12 @@
 		const newEmail = event.detail;
 		emails = [...emails, newEmail];
 		activeEmailId = newEmail.id;
-		selectedMessage = null; // Reset selected message when switching emails
+		selectedMessage = null;
 	}
 
 	function handleEmailSelect(event: CustomEvent<string>) {
 		activeEmailId = event.detail;
-		selectedMessage = null; // Reset selected message when switching emails
+		selectedMessage = null;
 	}
 
 	function handleEmailDelete(event: CustomEvent<string>) {
@@ -40,8 +40,6 @@
 	}
 
 	function handleRefreshMessages() {
-		// Force refresh by triggering a new fetch in MessageList
-		// This will be handled by the MessageList component's refresh event
 		toast.success('Refreshing', {
 			description: 'Checking for new messages...'
 		});
