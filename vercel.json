@@ -1,0 +1,10 @@
+{
+  "buildCommand": "bun run build",
+  "outputDirectory": ".svelte-kit/output",
+  "framework": "svelte",
+  "installCommand": "bun install",
+  "dev": {
+    "command": "bun run dev",
+    "port": 5173
+  }
+}

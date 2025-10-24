@@ -7,15 +7,7 @@
 	import type { EmailLog, TempEmail } from '$lib/types';
 	import { Mail } from 'lucide-svelte';
 
-	let emails: TempEmail[] = $state([
-		{
-			id: 'aksi@beanbill.online',
-			address: 'aksi@beanbill.online',
-			prefix: 'aksi',
-			createdAt: new Date(),
-			messages: []
-		}
-	]);
+	let emails: TempEmail[] = $state([]);
 	let activeEmailId: string | null = $state('');
 	let selectedMessage: EmailLog | null = $state(null);
 
