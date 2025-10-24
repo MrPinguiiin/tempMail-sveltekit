@@ -17,7 +17,8 @@
 
 	let messages: EmailLog[] = $state([]);
 	let isLoading = $state(false);
-	let autoRefreshInterval: NodeJS.Timeout | null = $state(null);
+	let eventSource: EventSource | null = $state(null);
+	let isConnected = $state(false);
 
 	async function fetchMessages() {
 		const emailToFetch = activeEmail;
@@ -28,14 +29,20 @@
 
 		isLoading = true;
 		try {
-			const response = await fetch(`/api/inbox?email=${emailToFetch.address}`);
+			const response = await fetch(`/api/inbox?email=${emailToFetch.address}`, {
+				cache: 'no-cache',
+				headers: {
+					'Cache-Control': 'no-cache, no-store, must-revalidate',
+					'Pragma': 'no-cache'
+				}
+			});
 			if (!response.ok) {
 				throw new Error('Gagal mengambil pesan inbox.');
 			}
-			messages = await response.json();
+			const newMessages = await response.json() as EmailLog[];
+			messages = newMessages;
 		} catch (e) {
 			console.error('Error fetching messages:', e);
-			messages = [];
 		} finally {
 			isLoading = false;
 		}
@@ -46,29 +53,71 @@
 		fetchMessages();
 	}
 
+	function setupSSE(email: string) {
+		// Close existing connection if any
+		if (eventSource) {
+			eventSource.close();
+			eventSource = null;
+		}
+
+		// Create new SSE connection
+		eventSource = new EventSource(`/api/inbox/stream?email=${encodeURIComponent(email)}`);
+
+		eventSource.onopen = () => {
+			isConnected = true;
+			console.log('[SSE] Connected to inbox stream');
+		};
+
+		eventSource.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data);
+				
+				if (data.type === 'update') {
+					messages = data.emails;
+					isLoading = false;
+				} else if (data.type === 'heartbeat') {
+					console.log('[SSE] Heartbeat received');
+				} else if (data.type === 'error') {
+					console.error('[SSE] Server error:', data.message);
+				}
+			} catch (e) {
+				console.error('[SSE] Error parsing message:', e);
+			}
+		};
+
+		eventSource.onerror = (error) => {
+			console.error('[SSE] Connection error:', error);
+			isConnected = false;
+			
+			// Attempt to reconnect after 5 seconds
+			setTimeout(() => {
+				if (activeEmail) {
+					setupSSE(activeEmail.address);
+				}
+			}, 5000);
+		};
+	}
+
 	$effect(() => {
 		if (activeEmail) {
-			// Initial fetch
-			fetchMessages();
-			
-			// Auto-refresh every 30 seconds
-			if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-			autoRefreshInterval = setInterval(() => {
-				fetchMessages();
-			}, 5000); // refresh setiap 5 detik
+			// Setup SSE connection
+			isLoading = true;
+			setupSSE(activeEmail.address);
 		} else {
+			// Cleanup
 			messages = [];
-			if (autoRefreshInterval) {
-				clearInterval(autoRefreshInterval);
-				autoRefreshInterval = null;
+			isConnected = false;
+			if (eventSource) {
+				eventSource.close();
+				eventSource = null;
 			}
 		}
 
 		// Cleanup on unmount
 		return () => {
-			if (autoRefreshInterval) {
-				clearInterval(autoRefreshInterval);
-				autoRefreshInterval = null;
+			if (eventSource) {
+				eventSource.close();
+				eventSource = null;
 			}
 		};
 	});
@@ -95,14 +144,22 @@
 <Card class="h-full bg-white dark:bg-slate-950 flex flex-col border-slate-200 dark:border-slate-800">
 	<CardHeader class="border-b border-slate-200 dark:border-slate-800 p-6">
 		<div class="flex items-center justify-between mb-2">
-			<CardTitle class="text-slate-900 dark:text-white">Inbox</CardTitle>
+			<div class="flex items-center gap-2">
+				<CardTitle class="text-slate-900 dark:text-white">Inbox</CardTitle>
+				{#if isConnected}
+					<span class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+						<span class="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
+						Live
+					</span>
+				{/if}
+			</div>
 			<Button
 				size="sm"
 				variant="ghost"
 				class="h-8 w-8 p-0"
 				onclick={handleRefresh}
 				disabled={isLoading}
-				title="Refresh messages (Auto-refresh every 30s)"
+				title="Refresh messages (Real-time updates via SSE)"
 			>
 				<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
 			</Button>
