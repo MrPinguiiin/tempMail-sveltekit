@@ -21,6 +21,7 @@
 	}>();
 
 	let messageCounts: Record<string, number> = $state({});
+	let eventSources: Record<string, EventSource> = $state({});
 
 	function copyToClipboard(text: string) {
 		navigator.clipboard.writeText(text);
@@ -29,23 +30,81 @@
 		});
 	}
 
-	async function fetchMessageCount(address: string) {
+	function setupSSEForEmail(address: string) {
+		// Close existing connection if any
+		if (eventSources[address]) {
+			eventSources[address].close();
+			delete eventSources[address];
+		}
+
+		// Create new SSE connection for this email
+		const eventSource = new EventSource(`/api/inbox/stream?email=${encodeURIComponent(address)}`);
+		eventSources[address] = eventSource;
+
+		eventSource.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data);
+				
+				if (data.type === 'update') {
+					// Update message count for this email
+					messageCounts[address] = data.count || 0;
+					messageCounts = { ...messageCounts };
+				}
+			} catch (e) {
+				console.error('[SSE] Error parsing message for', address, ':', e);
+			}
+		};
+
+		eventSource.onerror = (error) => {
+			console.error('[SSE] Connection error for', address, ':', error);
+			
+			// Attempt to reconnect after 5 seconds
+			setTimeout(() => {
+				if (emails.some(email => email.address === address)) {
+					setupSSEForEmail(address);
+				}
+			}, 5000);
+		};
+	}
+
+	async function fetchInitialMessageCount(address: string) {
 		try {
 			const response = await fetch(`/api/inbox?email=${address}`);
 			if (response.ok) {
 				const messages = await response.json() as any[];
 				messageCounts[address] = messages.length;
-				messageCounts = messageCounts;
+				messageCounts = { ...messageCounts };
 			}
 		} catch (e) {
-			console.error('Error fetching message count:', e);
+			console.error('Error fetching initial message count:', e);
 		}
 	}
 
 	$effect(() => {
+		// Setup SSE for all emails
 		emails.forEach((email) => {
-			fetchMessageCount(email.address);
+			// Get initial count first
+			fetchInitialMessageCount(email.address);
+			// Then setup SSE for real-time updates
+			setupSSEForEmail(email.address);
 		});
+
+		// Cleanup SSE connections for emails that no longer exist
+		const currentAddresses = emails.map(email => email.address);
+		Object.keys(eventSources).forEach(address => {
+			if (!currentAddresses.includes(address)) {
+				eventSources[address].close();
+				delete eventSources[address];
+				delete messageCounts[address];
+			}
+		});
+
+		// Cleanup on unmount
+		return () => {
+			Object.values(eventSources).forEach(eventSource => {
+				eventSource.close();
+			});
+		};
 	});
 </script>
 
