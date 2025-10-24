@@ -20,7 +20,7 @@
 		emailDelete: string;
 	}>();
 
-	let messageCounts: Map<string, number> = $state(new Map());
+	let messageCounts: Record<string, number> = $state({});
 
 	function copyToClipboard(text: string) {
 		navigator.clipboard.writeText(text);
@@ -34,7 +34,8 @@
 			const response = await fetch(`/api/inbox?email=${address}`);
 			if (response.ok) {
 				const messages = await response.json() as any[];
-				messageCounts.set(address, messages.length);
+				messageCounts[address] = messages.length;
+				messageCounts = messageCounts;
 			}
 		} catch (e) {
 			console.error('Error fetching message count:', e);
@@ -79,7 +80,7 @@
 						<div class="flex-1 min-w-0">
 							<p class="text-sm font-medium text-slate-900 dark:text-white truncate">{email.address}</p>
 							<p class="text-xs text-slate-500 dark:text-slate-400">
-								{messageCounts.get(email.address) || 0} message{messageCounts.get(email.address) !== 1 ? "s" : ""}
+								{messageCounts[email.address] || 0} message{messageCounts[email.address] !== 1 ? "s" : ""}
 							</p>
 						</div>
 					</div>
