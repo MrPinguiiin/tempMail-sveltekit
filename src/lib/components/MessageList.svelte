@@ -17,6 +17,7 @@
 
 	let messages: EmailLog[] = $state([]);
 	let isLoading = $state(false);
+	let autoRefreshInterval: NodeJS.Timeout | null = $state(null);
 
 	async function fetchMessages() {
 		const emailToFetch = activeEmail;
@@ -40,12 +41,36 @@
 		}
 	}
 
+	function handleRefresh() {
+		dispatch('refresh');
+		fetchMessages();
+	}
+
 	$effect(() => {
 		if (activeEmail) {
+			// Initial fetch
 			fetchMessages();
+			
+			// Auto-refresh every 30 seconds
+			if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+			autoRefreshInterval = setInterval(() => {
+				fetchMessages();
+			}, 5000); // refresh setiap 5 detik
 		} else {
 			messages = [];
+			if (autoRefreshInterval) {
+				clearInterval(autoRefreshInterval);
+				autoRefreshInterval = null;
+			}
 		}
+
+		// Cleanup on unmount
+		return () => {
+			if (autoRefreshInterval) {
+				clearInterval(autoRefreshInterval);
+				autoRefreshInterval = null;
+			}
+		};
 	});
 
 	function getSender(from: EmailLog['from']): string {
@@ -75,8 +100,9 @@
 				size="sm"
 				variant="ghost"
 				class="h-8 w-8 p-0"
-				onclick={() => dispatch('refresh')}
+				onclick={handleRefresh}
 				disabled={isLoading}
+				title="Refresh messages (Auto-refresh every 30s)"
 			>
 				<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
 			</Button>
@@ -131,4 +157,4 @@
 			</div>
 		{/if}
 	</CardContent>
-</Card> 
+</Card>
