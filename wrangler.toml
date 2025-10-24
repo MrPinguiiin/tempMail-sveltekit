@@ -6,4 +6,4 @@ compatibility_date = "2024-07-10" # Tanggal hari ini
 # Konfigurasi untuk KV Namespace
 [[kv_namespaces]]
 binding = "INBOX_KV"
-id = "5d8db901d3ef49cd896b903d90eb20fe" 
+id = "5d8db901d3ef49cd896b903d90eb20fe"

@@ -21,7 +21,6 @@ async function fetchFromKv(kv: KVNamespace, prefix: string) {
 	
 	const filteredEmails = emails.filter((e): e is Record<string, unknown> => e !== null);
 
-	// Urutkan berdasarkan tanggal, terbaru lebih dulu
 	filteredEmails.sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
 
 	return filteredEmails;
