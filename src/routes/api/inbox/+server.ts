@@ -28,6 +28,25 @@ async function retryWithBackoff<T>(
 	throw new Error('Max retries exceeded');
 }
 
+// Email validation function
+function isValidEmail(email: string): boolean {
+	if (!email || email.length > 255) return false;
+	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	return emailRegex.test(email);
+}
+
+// Safe JSON parse function
+function safeJsonParse<T>(jsonString: string, fallback: T): T {
+	try {
+		return JSON.parse(jsonString) as T;
+	} catch (e) {
+		if (dev) {
+			console.error('Invalid JSON parse:', e);
+		}
+		return fallback;
+	}
+}
+
 async function fetchFromKv(kv: KVNamespace, prefix: string) {
 	const list = await kv.list({ prefix });
 
@@ -66,7 +85,7 @@ async function fetchFromD1(db: D1Database, email: string) {
 		subject: row.subject,
 		html: row.html_content,
 		text: row.text_content,
-		attachments: JSON.parse(row.attachments || '[]'),
+		attachments: safeJsonParse(row.attachments || '[]', []),
 		date: row.date_received
 	}));
 }
@@ -149,8 +168,10 @@ async function fetchFromKvAPI(
 }
 export const GET: RequestHandler = async ({ url, platform }) => {
 	const email = url.searchParams.get('email');
-	if (!email) {
-		return json({ error: 'Parameter email diperlukan' }, { status: 400 });
+	
+	// Email validation
+	if (!email || !isValidEmail(email)) {
+		return json({ error: 'Invalid email format' }, { status: 400 });
 	}
 
 	try {
@@ -167,16 +188,12 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 			return json(emails);
 		}
 
-		// Untuk semua mode, gunakan D1 Database via HTTP API
+		// Untuk semua mode, gunakan D1 Database via HTTP API dengan parameterized query
 		try {
-			// Basic sanitization to prevent SQL injection
-			const sanitizedEmail = email.replace(/'/g, "''");
-			
-			// Use D1 HTTP API directly
+			// Use D1 HTTP API directly with parameterized query
 			const d1ApiUrl = `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query`;
 			
-			const query = `SELECT id, to_address, from_address, from_name, subject, html_content, text_content, attachments, date_received FROM emails WHERE to_address = '${sanitizedEmail}'`;
-			
+			// Use parameterized query to prevent SQL injection
 			const apiResponse = await retryWithBackoff(async () => {
 				const response = await fetch(d1ApiUrl, {
 					method: 'POST',
@@ -186,12 +203,16 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 						'X-Account-ID': CLOUDFLARE_ACCOUNT_ID
 					},
 					body: JSON.stringify({
-						sql: query
+						sql: 'SELECT id, to_address, from_address, from_name, subject, html_content, text_content, attachments, date_received FROM emails WHERE to_address = ? AND is_deleted = FALSE ORDER BY date_received DESC',
+						params: [email]
 					})
 				});
 				
 				if (!response.ok) {
-					throw new Error(`D1 API error: ${response.status} ${response.statusText}`);
+					if (dev) {
+						console.error('[DEV] D1 API error:', response.status);
+					}
+					throw new Error('Database operation failed');
 				}
 				
 				return response;
@@ -213,7 +234,7 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 						subject: row.subject,
 						html: row.html_content || '',
 						text: row.text_content || '',
-						attachments: JSON.parse(row.attachments || '[]'),
+						attachments: safeJsonParse(row.attachments || '[]', []),
 						date: row.date_received
 					}));
 
@@ -223,21 +244,25 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 			
 			return json([]);
 		} catch (error) {
-			console.log('Failed to access D1 Database via API:', error);
+			if (dev) {
+				console.error('[DEV] Failed to access D1 Database:', error);
+			}
 			return json([]);
 		}
 
-		return json({ error: 'Lingkungan tidak didukung' }, { status: 500 });
+		return json({ error: 'Service unavailable' }, { status: 500 });
 
 	} catch (error: any) {
-		console.error('Gagal mengambil email:', error);
+		if (dev) {
+			console.error('[DEV] Error:', error);
+		}
 		if (error.status === 429) {
 			return json({
-				error: 'Rate limit terlampaui. Silakan coba lagi dalam beberapa saat.',
+				error: 'Too many requests. Please try again later.',
 				retryAfter: 60
 			}, { status: 429 });
 		}
-		return json({ error: 'Gagal mengambil data dari server' }, { status: 500 });
+		return json({ error: 'An error occurred' }, { status: 500 });
 	}
 };
 
@@ -274,20 +299,21 @@ export const POST: RequestHandler = async ({ request, url, platform }) => {
 
 		if (dev) {
 			// For development, just return success
-			console.log(`Would delete email ${emailId} for ${email}`);
 			return json({ success: true });
 		}
 
-		return json({ error: 'Lingkungan tidak didukung' }, { status: 500 });
+		return json({ error: 'Service unavailable' }, { status: 500 });
 
 	} catch (error: any) {
-		console.error('Gagal menghapus email:', error);
+		if (dev) {
+			console.error('[DEV] Error deleting email:', error);
+		}
 		if (error.status === 429) {
 			return json({
-				error: 'Rate limit terlampaui. Silakan coba lagi dalam beberapa saat.',
+				error: 'Too many requests. Please try again later.',
 				retryAfter: 60
 			}, { status: 429 });
 		}
-		return json({ error: 'Gagal menghapus email' }, { status: 500 });
+		return json({ error: 'An error occurred' }, { status: 500 });
 	}
 };

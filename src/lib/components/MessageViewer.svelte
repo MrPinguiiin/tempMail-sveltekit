@@ -49,7 +49,6 @@
 						title="Email Content"
 						srcdoc={message.html}
 						class="w-full h-full border-0"
-						sandbox="allow-same-origin"
 					></iframe>
 				{:else if message.text}
 					<p class="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
