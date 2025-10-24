@@ -1,38 +1,80 @@
-# sv
+# TempMail SvelteKit
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A temporary email service built with SvelteKit and Cloudflare Workers KV.
 
-## Creating a project
+## 🚀 Getting Started
 
-If you're seeing this, you've probably already done this step. Congrats!
+### Prerequisites
+- Node.js 18 or later
+- Bun (recommended) or npm/yarn
+- Cloudflare account with KV namespace
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/tempMail-sveltekit.git
+   cd tempMail-sveltekit
+   ```
+
+2. **Install dependencies**
+   ```bash
+   bun install
+   # or
+   npm install
+   ```
+
+3. **Configure environment**
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and add your Cloudflare credentials:
+   ```env
+   CLOUDFLARE_ACCOUNT_ID="your_account_id"
+   KV_NAMESPACE_ID="your_kv_namespace_id"
+   CLOUDFLARE_API_TOKEN="your_api_token"
+   ```
+
+## 🛠 Development
+
+Start the development server:
 
 ```bash
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
+bun run dev
+# or
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+Access the application at http://localhost:8000
 
-To create a production version of your app:
+### Environment Variables
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
+- `KV_NAMESPACE_ID`: KV namespace ID from Cloudflare
+- `CLOUDFLARE_API_TOKEN`: API token with KV read/write permissions
 
+## 🚀 Deployment
+
+### Cloudflare Pages
+1. Connect your GitHub repository to Cloudflare Pages
+2. Set the build command: `bun run build` or `npm run build`
+3. Set the output directory: `.svelte-kit/cloudflare`
+4. Add environment variables from your `.env` file
+
+### Local Build
 ```bash
+bun run build
+# or
 npm run build
+
+# Preview production build
+bun run preview
+# or
+npm run preview
 ```
 
-You can preview the production build with `npm run preview`.
+## 📝 License
+This project is licensed under the MIT License.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## 🙏 Acknowledgments
+- Built with [SvelteKit](https://kit.svelte.dev/)
+- Powered by [Cloudflare Workers KV](https://www.cloudflare.com/products/workers-kv/)
