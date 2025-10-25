@@ -1,0 +1,15 @@
+# Top-level configuration
+name = "tempmail" # Ganti dengan nama proyek Anda jika berbeda
+main = "src/workers/email-parser.ts" # Path ke file worker utama Anda
+compatibility_date = "2024-07-10" # Tanggal hari ini
+
+# Konfigurasi untuk D1 Database
+[[d1_databases]]
+binding = "INBOX_DB"
+database_name = "tempemail"
+database_id = "YOUR_D1_DATABASE_ID_HERE" # Ganti dengan ID database Anda
+
+# Konfigurasi untuk KV Namespace (backup/fallback)
+[[kv_namespaces]]
+binding = "INBOX_KV"
+id = "YOUR_KV_NAMESPACE_ID_HERE" # Ganti dengan ID KV namespace Anda
