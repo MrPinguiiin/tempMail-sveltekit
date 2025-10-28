@@ -151,11 +151,18 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 			// Function to setup Redis connection
 			const setupRedis = async () => {
 				try {
+					// Check if Redis URL is available
+					if (!REDIS_URL) {
+						console.log('[Redis SSE] No REDIS_URL found, using fallback mode');
+						isConnected = false;
+						return;
+					}
+
 					// Import Redis client dynamically
 					const { createClient } = await import('redis');
 					
 					redisClient = createClient({
-						url: REDIS_URL || 'redis://localhost:6379'
+						url: REDIS_URL
 					});
 
 					redisClient.on('error', (err: any) => {
@@ -212,6 +219,22 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 			// Setup Redis connection
 			await setupRedis();
 
+			// If Redis is not available, use polling mode
+			let pollingInterval: NodeJS.Timeout | null = null;
+			if (!isConnected) {
+				console.log('[Redis SSE] Using polling mode instead of Redis');
+				pollingInterval = setInterval(async () => {
+					const emails = await fetchEmails();
+					sendData({
+						type: 'update',
+						emails: emails,
+						count: emails.length,
+						timestamp: new Date().toISOString(),
+						source: 'polling'
+					});
+				}, 5000); // Poll every 5 seconds
+			}
+
 			// Send heartbeat every 30 seconds to keep connection alive
 			const heartbeatInterval = setInterval(() => {
 				sendData({
@@ -224,6 +247,9 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 			// Cleanup on close
 			return () => {
 				clearInterval(heartbeatInterval);
+				if (pollingInterval) {
+					clearInterval(pollingInterval);
+				}
 				if (redisClient && isConnected) {
 					redisClient.unsubscribe(`email:${email}`);
 					redisClient.disconnect();

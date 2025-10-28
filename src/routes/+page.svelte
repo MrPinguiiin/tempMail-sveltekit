@@ -24,6 +24,14 @@
 		activeEmailId = newEmail.id;
 		selectedMessage = null;
 		console.log('[Page] Email generated:', newEmail);
+		
+		// Trigger refresh untuk inbox baru
+		setTimeout(() => {
+			console.log('[Page] Triggering inbox refresh for new email');
+			// Dispatch event untuk refresh inbox
+			const refreshEvent = new CustomEvent('refreshInbox');
+			window.dispatchEvent(refreshEvent);
+		}, 1000); // Delay 1 detik untuk memastikan email sudah terdaftar
 	}
 
 	function handleEmailSelect(event: CustomEvent<string>) {

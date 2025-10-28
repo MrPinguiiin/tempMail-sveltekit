@@ -64,22 +64,34 @@
 		fetchMessages();
 	}
 
+	
+
 	function setupAutoRefresh() {
-		// Clear existing interval
+		// Only clear if we don't have an interval or it's for a different email
 		if (refreshInterval) {
+			console.log('[MessageList] Clearing existing auto refresh');
 			clearInterval(refreshInterval);
 			refreshInterval = null;
 		}
 
-		// Setup new interval for auto refresh every 10 seconds
+		// Setup new interval for auto refresh every 5 seconds
 		refreshInterval = setInterval(() => {
+			console.log('[MessageList] Auto refresh interval triggered:', {
+				hasActiveEmail: !!activeEmail,
+				isLoading,
+				emailAddress: activeEmail?.address
+			});
+			
 			if (activeEmail && !isLoading) {
 				console.log('[MessageList] Auto refresh - fetching messages');
 				fetchMessages();
+			} else {
+				console.log('[MessageList] Auto refresh skipped - no active email or loading');
 			}
-		}, 10000);
+		}, 5000);
 
-		console.log('[MessageList] Auto refresh setup - every 10 seconds');
+		console.log('[MessageList] Auto refresh setup - every 5 seconds');
+		console.log('[MessageList] Auto refresh interval ID:', refreshInterval);
 	}
 
 	function clearAutoRefresh() {
@@ -113,8 +125,8 @@
 		eventSource = new EventSource(sseUrl);
 
 		eventSource.onopen = () => {
-			isConnected = true;
 			console.log('[Redis SSE] Connected to inbox stream for:', email);
+			// Don't set isConnected to true here, let heartbeat determine it
 		};
 		
 		// Add timeout for connection
@@ -131,13 +143,26 @@
 			try {
 				const data = JSON.parse(event.data);
 				console.log('[Redis SSE] Received data:', data);
+				console.log('[Redis SSE] Event data:', event.data);
 				
 				if (data.type === 'update') {
 					console.log('[Redis SSE] Updating messages:', data.emails);
+					console.log('[Redis SSE] Source:', data.source);
 					messages = data.emails;
 					isLoading = false;
+					
+					// Update connection status based on source
+					if (data.source === 'redis') {
+						isConnected = true;
+					} else if (data.source === 'polling') {
+						isConnected = false;
+					}
 				} else if (data.type === 'heartbeat') {
 					console.log('[Redis SSE] Heartbeat received, Redis connected:', data.redisConnected);
+					// Update connection status based on heartbeat
+					if (data.redisConnected !== undefined) {
+						isConnected = data.redisConnected;
+					}
 				} else if (data.type === 'error') {
 					console.error('[Redis SSE] Server error:', data.message);
 				}
@@ -161,6 +186,22 @@
 		};
 	}
 
+	// Listen for refreshInbox event
+	$effect(() => {
+		const handleRefreshInbox = () => {
+			if (activeEmail) {
+				console.log('[MessageList] Received refreshInbox event - fetching messages');
+				fetchMessages();
+			}
+		};
+
+		window.addEventListener('refreshInbox', handleRefreshInbox);
+		
+		return () => {
+			window.removeEventListener('refreshInbox', handleRefreshInbox);
+		};
+	});
+
 	$effect(() => {
 		const emailAddress = activeEmail?.address;
 		
@@ -180,7 +221,7 @@
 			// Primary: Use fetchMessages immediately
 			fetchMessages();
 			
-			// Setup auto refresh every 10 seconds
+			// Setup auto refresh every 5 seconds (faster for testing)
 			setupAutoRefresh();
 			
 			// Secondary: Try SSE for real-time updates (optional)
@@ -200,15 +241,25 @@
 				eventSource.close();
 				eventSource = null;
 			}
+		} else if (emailAddress && emailAddress === currentEmailAddress) {
+			// Same email, don't clear auto refresh
+			console.log('[MessageList] Same email, keeping auto refresh active');
 		}
 
 		// Cleanup on unmount
 		return () => {
-			clearAutoRefresh();
+			// Don't clear auto refresh here, only clear on component unmount
 			if (eventSource) {
 				eventSource.close();
 				eventSource = null;
 			}
+		};
+	});
+
+	// Cleanup on component unmount
+	$effect(() => {
+		return () => {
+			clearAutoRefresh();
 		};
 	});
 
@@ -239,21 +290,28 @@
 				{#if isConnected}
 					<span class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
 						<span class="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
-						Live
+						Redis Live
+					</span>
+				{:else}
+					<span class="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+						<span class="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-pulse"></span>
+						Polling
 					</span>
 				{/if}
 			</div>
-			<Button
-				size="sm"
-				variant="default"
-				class="h-8 p-0 w-fit"
-				onclick={handleRefresh}
-				disabled={isLoading}
-				title="Refresh messages"
-			>
-				<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
-				Refresh
-			</Button>
+			<div class="flex gap-2">
+				<Button
+					size="sm"
+					variant="default"
+					class="h-8 p-0 w-fit"
+					onclick={handleRefresh}
+					disabled={isLoading}
+					title="Refresh messages"
+				>
+					<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
+					Refresh
+				</Button>
+			</div>
 		</div>
 		{#if activeEmail}
 			<CardDescription class="text-slate-500 dark:text-slate-400 truncate">
