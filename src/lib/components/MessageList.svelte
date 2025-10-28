@@ -97,30 +97,30 @@
 			eventSource = null;
 		}
 
-		// Create new SSE connection
-		const sseUrl = `/api/inbox/stream?email=${encodeURIComponent(email)}`;
-		console.log('[SSE] Connecting to:', sseUrl);
+		// Create new SSE connection using Redis
+		const sseUrl = `/api/inbox/redis-stream?email=${encodeURIComponent(email)}`;
+		console.log('[Redis SSE] Connecting to:', sseUrl);
 		
 		// Test if SSE endpoint is accessible
 		fetch(sseUrl, { method: 'HEAD' })
 			.then(response => {
-				console.log('[SSE] Endpoint test response:', response.status, response.statusText);
+				console.log('[Redis SSE] Endpoint test response:', response.status, response.statusText);
 			})
 			.catch(error => {
-				console.error('[SSE] Endpoint test failed:', error);
+				console.error('[Redis SSE] Endpoint test failed:', error);
 			});
 		
 		eventSource = new EventSource(sseUrl);
 
 		eventSource.onopen = () => {
 			isConnected = true;
-			console.log('[SSE] Connected to inbox stream for:', email);
+			console.log('[Redis SSE] Connected to inbox stream for:', email);
 		};
 		
 		// Add timeout for connection
 		setTimeout(() => {
 			if (eventSource && eventSource.readyState === EventSource.CONNECTING) {
-				console.error('[SSE] Connection timeout after 5 seconds');
+				console.error('[Redis SSE] Connection timeout after 5 seconds');
 				eventSource.close();
 				eventSource = null;
 				isConnected = false;
@@ -130,31 +130,31 @@
 		eventSource.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
-				console.log('[SSE] Received data:', data);
+				console.log('[Redis SSE] Received data:', data);
 				
 				if (data.type === 'update') {
-					console.log('[SSE] Updating messages:', data.emails);
+					console.log('[Redis SSE] Updating messages:', data.emails);
 					messages = data.emails;
 					isLoading = false;
 				} else if (data.type === 'heartbeat') {
-					console.log('[SSE] Heartbeat received');
+					console.log('[Redis SSE] Heartbeat received, Redis connected:', data.redisConnected);
 				} else if (data.type === 'error') {
-					console.error('[SSE] Server error:', data.message);
+					console.error('[Redis SSE] Server error:', data.message);
 				}
 			} catch (e) {
-				console.error('[SSE] Error parsing message:', e);
+				console.error('[Redis SSE] Error parsing message:', e);
 			}
 		};
 
 		eventSource.onerror = (error) => {
-			console.error('[SSE] Connection error:', error);
-			console.error('[SSE] EventSource readyState:', eventSource?.readyState);
+			console.error('[Redis SSE] Connection error:', error);
+			console.error('[Redis SSE] EventSource readyState:', eventSource?.readyState);
 			isConnected = false;
 			
 			// Attempt to reconnect after 5 seconds
 			setTimeout(() => {
 				if (activeEmail && activeEmail.address === currentEmailAddress) {
-					console.log('[SSE] Attempting to reconnect...');
+					console.log('[Redis SSE] Attempting to reconnect...');
 					setupSSE(activeEmail.address);
 				}
 			}, 5000);

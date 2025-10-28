@@ -3,6 +3,7 @@ import PostalMime from 'postal-mime';
 export interface Env {
 	INBOX_KV: KVNamespace;
 	INBOX_DB: D1Database;
+	REDIS_URL?: string;
 }
 
 export default {
@@ -64,6 +65,36 @@ export default {
 			});
 			} catch (kvError) {
 				console.warn('KV fallback failed:', kvError);
+			}
+
+			// Send Redis notification for real-time updates
+			try {
+				if (env.REDIS_URL) {
+					const { createClient } = await import('redis');
+					const redisClient = createClient({
+						url: env.REDIS_URL
+					});
+
+					redisClient.on('error', (err: any) => {
+						console.error('[Email Parser] Redis Client Error:', err);
+					});
+
+					await redisClient.connect();
+
+					const notification = {
+						email: toAddress,
+						timestamp: new Date().toISOString(),
+						message: `New email from ${fromAddress}: ${parsedEmail.subject}`,
+						emailId: id
+					};
+
+					await redisClient.publish(`email:${toAddress}`, JSON.stringify(notification));
+					console.log(`[Email Parser] Published Redis notification for: ${toAddress}`);
+
+					await redisClient.disconnect();
+				}
+			} catch (redisError) {
+				console.warn('Redis notification failed:', redisError);
 			}
 
 		} catch (error) {
