@@ -15,7 +15,6 @@
 	// Update activeEmailData when activeEmailId or emails change
 	$effect(() => {
 		activeEmailData = emails.find((email) => email.id === activeEmailId) || null;
-		console.log('[Page] activeEmailData updated:', $state.snapshot(activeEmailData));
 	});
 
 	function handleEmailGenerated(event: CustomEvent<TempEmail>) {
@@ -23,11 +22,9 @@
 		emails = [...emails, newEmail];
 		activeEmailId = newEmail.id;
 		selectedMessage = null;
-		console.log('[Page] Email generated:', newEmail);
 		
 		// Trigger refresh untuk inbox baru
 		setTimeout(() => {
-			console.log('[Page] Triggering inbox refresh for new email');
 			// Dispatch event untuk refresh inbox
 			const refreshEvent = new CustomEvent('refreshInbox');
 			window.dispatchEvent(refreshEvent);
@@ -37,7 +34,6 @@
 	function handleEmailSelect(event: CustomEvent<string>) {
 		activeEmailId = event.detail;
 		selectedMessage = null;
-		console.log('[Page] Email selected:', event.detail);
 	}
 
 	function handleEmailDelete(event: CustomEvent<string>) {

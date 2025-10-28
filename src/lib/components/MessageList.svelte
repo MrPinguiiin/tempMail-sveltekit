@@ -30,7 +30,6 @@
 			return;
 		}
 
-		console.log('[MessageList] Fetching messages for:', emailToFetch.address);
 		isLoading = true;
 		try {
 			const response = await fetch(`/api/inbox?email=${emailToFetch.address}`, {
@@ -40,16 +39,13 @@
 					'Pragma': 'no-cache'
 				}
 			});
-			console.log('[MessageList] API response status:', response.status);
 			
 			if (!response.ok) {
 				const errorText = await response.text();
-				console.error('[MessageList] API error:', response.status, errorText);
 				throw new Error('Gagal mengambil pesan inbox.');
 			}
 			
 			const newMessages = await response.json() as EmailLog[];
-			console.log('[MessageList] Received messages:', newMessages);
 			messages = newMessages;
 		} catch (e) {
 			console.error('[MessageList] Error fetching messages:', e);
@@ -60,7 +56,6 @@
 
 	function handleRefresh() {
 		dispatch('refresh');
-		console.log('[MessageList] Refresh requested - fetching messages');
 		fetchMessages();
 	}
 
@@ -69,36 +64,22 @@
 	function setupAutoRefresh() {
 		// Only clear if we don't have an interval or it's for a different email
 		if (refreshInterval) {
-			console.log('[MessageList] Clearing existing auto refresh');
 			clearInterval(refreshInterval);
 			refreshInterval = null;
 		}
 
 		// Setup new interval for auto refresh every 5 seconds
 		refreshInterval = setInterval(() => {
-			console.log('[MessageList] Auto refresh interval triggered:', {
-				hasActiveEmail: !!activeEmail,
-				isLoading,
-				emailAddress: activeEmail?.address
-			});
-			
 			if (activeEmail && !isLoading) {
-				console.log('[MessageList] Auto refresh - fetching messages');
 				fetchMessages();
-			} else {
-				console.log('[MessageList] Auto refresh skipped - no active email or loading');
 			}
 		}, 5000);
-
-		console.log('[MessageList] Auto refresh setup - every 5 seconds');
-		console.log('[MessageList] Auto refresh interval ID:', refreshInterval);
 	}
 
 	function clearAutoRefresh() {
 		if (refreshInterval) {
 			clearInterval(refreshInterval);
 			refreshInterval = null;
-			console.log('[MessageList] Auto refresh cleared');
 		}
 	}
 
@@ -111,28 +92,16 @@
 
 		// Create new SSE connection using Redis
 		const sseUrl = `/api/inbox/redis-stream?email=${encodeURIComponent(email)}`;
-		console.log('[Redis SSE] Connecting to:', sseUrl);
-		
-		// Test if SSE endpoint is accessible
-		fetch(sseUrl, { method: 'HEAD' })
-			.then(response => {
-				console.log('[Redis SSE] Endpoint test response:', response.status, response.statusText);
-			})
-			.catch(error => {
-				console.error('[Redis SSE] Endpoint test failed:', error);
-			});
 		
 		eventSource = new EventSource(sseUrl);
 
 		eventSource.onopen = () => {
-			console.log('[Redis SSE] Connected to inbox stream for:', email);
 			// Don't set isConnected to true here, let heartbeat determine it
 		};
 		
 		// Add timeout for connection
 		setTimeout(() => {
 			if (eventSource && eventSource.readyState === EventSource.CONNECTING) {
-				console.error('[Redis SSE] Connection timeout after 5 seconds');
 				eventSource.close();
 				eventSource = null;
 				isConnected = false;
@@ -142,12 +111,8 @@
 		eventSource.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
-				console.log('[Redis SSE] Received data:', data);
-				console.log('[Redis SSE] Event data:', event.data);
 				
 				if (data.type === 'update') {
-					console.log('[Redis SSE] Updating messages:', data.emails);
-					console.log('[Redis SSE] Source:', data.source);
 					messages = data.emails;
 					isLoading = false;
 					
@@ -158,7 +123,6 @@
 						isConnected = false;
 					}
 				} else if (data.type === 'heartbeat') {
-					console.log('[Redis SSE] Heartbeat received, Redis connected:', data.redisConnected);
 					// Update connection status based on heartbeat
 					if (data.redisConnected !== undefined) {
 						isConnected = data.redisConnected;
@@ -172,14 +136,11 @@
 		};
 
 		eventSource.onerror = (error) => {
-			console.error('[Redis SSE] Connection error:', error);
-			console.error('[Redis SSE] EventSource readyState:', eventSource?.readyState);
 			isConnected = false;
 			
 			// Attempt to reconnect after 5 seconds
 			setTimeout(() => {
 				if (activeEmail && activeEmail.address === currentEmailAddress) {
-					console.log('[Redis SSE] Attempting to reconnect...');
 					setupSSE(activeEmail.address);
 				}
 			}, 5000);
@@ -190,7 +151,6 @@
 	$effect(() => {
 		const handleRefreshInbox = () => {
 			if (activeEmail) {
-				console.log('[MessageList] Received refreshInbox event - fetching messages');
 				fetchMessages();
 			}
 		};
@@ -205,16 +165,8 @@
 	$effect(() => {
 		const emailAddress = activeEmail?.address;
 		
-		console.log('[MessageList] Effect triggered:', {
-			activeEmail: $state.snapshot(activeEmail),
-			emailAddress,
-			currentEmailAddress,
-			hasActiveEmail: !!activeEmail
-		});
-		
 		// Only setup if email address actually changed
 		if (emailAddress && emailAddress !== currentEmailAddress) {
-			console.log('[MessageList] Setting up for:', emailAddress);
 			currentEmailAddress = emailAddress;
 			isLoading = true;
 			
@@ -228,7 +180,6 @@
 			setupSSE(emailAddress);
 		} else if (!emailAddress && currentEmailAddress) {
 			// Cleanup when no email is selected
-			console.log('[MessageList] Cleaning up');
 			currentEmailAddress = null;
 			messages = [];
 			isConnected = false;
@@ -241,9 +192,6 @@
 				eventSource.close();
 				eventSource = null;
 			}
-		} else if (emailAddress && emailAddress === currentEmailAddress) {
-			// Same email, don't clear auto refresh
-			console.log('[MessageList] Same email, keeping auto refresh active');
 		}
 
 		// Cleanup on unmount
