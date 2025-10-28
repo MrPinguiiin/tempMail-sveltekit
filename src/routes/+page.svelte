@@ -10,17 +10,26 @@
 	let emails: TempEmail[] = $state([]);
 	let activeEmailId: string | null = $state('');
 	let selectedMessage: EmailLog | null = $state(null);
+	let activeEmailData: TempEmail | null = $state(null);
+
+	// Update activeEmailData when activeEmailId or emails change
+	$effect(() => {
+		activeEmailData = emails.find((email) => email.id === activeEmailId) || null;
+		console.log('[Page] activeEmailData updated:', $state.snapshot(activeEmailData));
+	});
 
 	function handleEmailGenerated(event: CustomEvent<TempEmail>) {
 		const newEmail = event.detail;
 		emails = [...emails, newEmail];
 		activeEmailId = newEmail.id;
 		selectedMessage = null;
+		console.log('[Page] Email generated:', newEmail);
 	}
 
 	function handleEmailSelect(event: CustomEvent<string>) {
 		activeEmailId = event.detail;
 		selectedMessage = null;
+		console.log('[Page] Email selected:', event.detail);
 	}
 
 	function handleEmailDelete(event: CustomEvent<string>) {
@@ -44,56 +53,69 @@
 			description: 'Checking for new messages...'
 		});
 	}
-
-	const activeEmailData = $derived(emails.find((email) => email.id === activeEmailId) || null);
 </script>
 
 <Toaster />
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+<div class="min-h-screen bg-background">
 	<!-- Header -->
-	<header class="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 sticky top-0 z-10">
-		<div class="max-w-7xl mx-auto px-6 py-4">
+	<header class="border-b border-border bg-card">
+		<div class="container mx-auto px-4 py-4">
 			<div class="flex items-center gap-3">
-				<div class="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-					<Mail class="w-5 h-5 text-blue-600 dark:text-blue-400" />
+				<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+					<Mail class="h-5 w-5 text-primary-foreground" />
 				</div>
 				<div>
-					<h1 class="text-2xl font-bold text-slate-900 dark:text-white">Temporary Email</h1>
-					<p class="text-sm text-slate-500 dark:text-slate-400">Generate temporary email addresses instantly</p>
+					<h1 class="text-xl font-bold text-foreground">BeanMail</h1>
+					<p class="text-xs text-muted-foreground">Temporary Email Service</p>
 				</div>
 			</div>
 		</div>
 	</header>
 
 	<!-- Main Content -->
-	<main class="max-w-7xl mx-auto px-6 py-8">
-		<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-200px)]">
-			<!-- Left Sidebar - Email Generator & List -->
-			<div class="lg:col-span-1 space-y-6 overflow-y-auto">
-				<EmailGenerator {emails} on:emailGenerated={handleEmailGenerated} />
+	<main class="container mx-auto px-4 py-6 md:py-8">
+		<div class="mx-auto max-w-6xl space-y-6">
+			<!-- Hero Section -->
+			<div class="text-center space-y-3">
+				<h2 class="text-3xl md:text-4xl font-bold text-balance text-foreground">Temporary Email Address</h2>
+				<p class="text-muted-foreground text-balance max-w-2xl mx-auto">
+					Generate a disposable email address instantly. Protect your privacy and avoid spam with our temporary
+					email service.
+				</p>
+			</div>
 
+			<!-- Email Generator -->
+			<EmailGenerator {emails} on:emailGenerated={handleEmailGenerated} />
+
+			<!-- Email List -->
+			<!-- {#if emails.length > 0}
 				<EmailList
 					{emails}
 					activeEmail={activeEmailId}
 					on:emailSelect={handleEmailSelect}
 					on:emailDelete={handleEmailDelete}
 				/>
-			</div>
+			{/if} -->
 
-			<!-- Middle - Inbox List -->
-			<div class="lg:col-span-1 overflow-hidden">
-				<MessageList
-					activeEmail={activeEmailData}
-					{selectedMessage}
-					on:messageSelect={handleMessageSelect}
-					on:refresh={handleRefreshMessages}
-				/>
-			</div>
-
-			<!-- Right - Email Content -->
-			<div class="lg:col-span-2 overflow-hidden">
-				<MessageViewer message={selectedMessage} />
-			</div>
+			<!-- Inbox and Message Reader -->
+			{#if activeEmailId}
+				<div class="grid gap-6 md:grid-cols-2">
+					<MessageList
+						activeEmail={activeEmailData}
+						{selectedMessage}
+						on:messageSelect={handleMessageSelect}
+						on:refresh={handleRefreshMessages}
+					/>
+					<MessageViewer message={selectedMessage} />
+				</div>
+			{/if}
 		</div>
 	</main>
+
+	<!-- Footer -->
+	<!-- <footer class="absolute bottom-0 w-full border-t border-border bg-card py-6">
+		<div class="container mx-auto px-4 text-center text-sm text-muted-foreground">
+			<p>© 2025 BeanMail. Temporary email service for privacy protection.</p>
+		</div>
+	</footer> -->
 </div>

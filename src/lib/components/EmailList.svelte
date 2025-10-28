@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import type { TempEmail } from '$lib/types';
-	import { Copy, Trash2 } from 'lucide-svelte';
+	import { Copy, Trash2, Mail } from 'lucide-svelte';
 	import { createEventDispatcher } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Badge from './ui/badge/badge.svelte';
@@ -49,14 +49,20 @@
 	});
 </script>
 
-<Card class="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+<Card class="border-border bg-card">
 	<CardHeader>
 		<div class="flex items-center justify-between">
-			<CardTitle class="text-slate-900 dark:text-white">Your Emails</CardTitle>
+			<CardTitle class="flex items-center gap-2">
+				<Mail class="h-5 w-5 text-primary" />
+				Your Emails
+			</CardTitle>
 			<Badge variant="secondary" class="text-xs">
 				{emails.length} active
 			</Badge>
 		</div>
+		<CardDescription class="text-muted-foreground">
+			Select an email to view its inbox
+		</CardDescription>
 	</CardHeader>
 	<CardContent>
 		<div class="space-y-2">
@@ -72,14 +78,14 @@
 					tabindex="0"
 					class="p-3 rounded-lg cursor-pointer transition-all border {
 						activeEmail === email.id
-							? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-							: 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+							? 'bg-accent border-border'
+							: 'bg-muted border-border hover:bg-accent/50'
 					}"
 				>
 					<div class="flex items-start justify-between gap-2 mb-2">
 						<div class="flex-1 min-w-0">
-							<p class="text-sm font-medium text-slate-900 dark:text-white truncate">{email.address}</p>
-							<p class="text-xs text-slate-500 dark:text-slate-400">
+							<p class="text-sm font-medium text-card-foreground truncate">{email.address}</p>
+							<p class="text-xs text-muted-foreground">
 								{messageCounts[email.address] || 0} message{messageCounts[email.address] !== 1 ? "s" : ""}
 							</p>
 						</div>
@@ -99,7 +105,7 @@
 						<Button
 							size="sm"
 							variant="ghost"
-							class="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+							class="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
 							onclick={(e: MouseEvent) => {
 								e.stopPropagation();
 								dispatch('emailDelete', email.id);

@@ -20,6 +20,9 @@
 	let eventSource: EventSource | null = $state(null);
 	let isConnected = $state(false);
 
+	let currentEmailAddress = $state<string | null>(null);
+	let refreshInterval: NodeJS.Timeout | null = $state(null);
+
 	async function fetchMessages() {
 		const emailToFetch = activeEmail;
 		if (!emailToFetch) {
@@ -27,6 +30,7 @@
 			return;
 		}
 
+		console.log('[MessageList] Fetching messages for:', emailToFetch.address);
 		isLoading = true;
 		try {
 			const response = await fetch(`/api/inbox?email=${emailToFetch.address}`, {
@@ -36,13 +40,19 @@
 					'Pragma': 'no-cache'
 				}
 			});
+			console.log('[MessageList] API response status:', response.status);
+			
 			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('[MessageList] API error:', response.status, errorText);
 				throw new Error('Gagal mengambil pesan inbox.');
 			}
+			
 			const newMessages = await response.json() as EmailLog[];
+			console.log('[MessageList] Received messages:', newMessages);
 			messages = newMessages;
 		} catch (e) {
-			console.error('Error fetching messages:', e);
+			console.error('[MessageList] Error fetching messages:', e);
 		} finally {
 			isLoading = false;
 		}
@@ -50,7 +60,34 @@
 
 	function handleRefresh() {
 		dispatch('refresh');
+		console.log('[MessageList] Refresh requested - fetching messages');
 		fetchMessages();
+	}
+
+	function setupAutoRefresh() {
+		// Clear existing interval
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+
+		// Setup new interval for auto refresh every 10 seconds
+		refreshInterval = setInterval(() => {
+			if (activeEmail && !isLoading) {
+				console.log('[MessageList] Auto refresh - fetching messages');
+				fetchMessages();
+			}
+		}, 10000);
+
+		console.log('[MessageList] Auto refresh setup - every 10 seconds');
+	}
+
+	function clearAutoRefresh() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+			console.log('[MessageList] Auto refresh cleared');
+		}
 	}
 
 	function setupSSE(email: string) {
@@ -61,18 +98,42 @@
 		}
 
 		// Create new SSE connection
-		eventSource = new EventSource(`/api/inbox/stream?email=${encodeURIComponent(email)}`);
+		const sseUrl = `/api/inbox/stream?email=${encodeURIComponent(email)}`;
+		console.log('[SSE] Connecting to:', sseUrl);
+		
+		// Test if SSE endpoint is accessible
+		fetch(sseUrl, { method: 'HEAD' })
+			.then(response => {
+				console.log('[SSE] Endpoint test response:', response.status, response.statusText);
+			})
+			.catch(error => {
+				console.error('[SSE] Endpoint test failed:', error);
+			});
+		
+		eventSource = new EventSource(sseUrl);
 
 		eventSource.onopen = () => {
 			isConnected = true;
-			console.log('[SSE] Connected to inbox stream');
+			console.log('[SSE] Connected to inbox stream for:', email);
 		};
+		
+		// Add timeout for connection
+		setTimeout(() => {
+			if (eventSource && eventSource.readyState === EventSource.CONNECTING) {
+				console.error('[SSE] Connection timeout after 5 seconds');
+				eventSource.close();
+				eventSource = null;
+				isConnected = false;
+			}
+		}, 5000);
 
 		eventSource.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
+				console.log('[SSE] Received data:', data);
 				
 				if (data.type === 'update') {
+					console.log('[SSE] Updating messages:', data.emails);
 					messages = data.emails;
 					isLoading = false;
 				} else if (data.type === 'heartbeat') {
@@ -87,11 +148,13 @@
 
 		eventSource.onerror = (error) => {
 			console.error('[SSE] Connection error:', error);
+			console.error('[SSE] EventSource readyState:', eventSource?.readyState);
 			isConnected = false;
 			
 			// Attempt to reconnect after 5 seconds
 			setTimeout(() => {
-				if (activeEmail) {
+				if (activeEmail && activeEmail.address === currentEmailAddress) {
+					console.log('[SSE] Attempting to reconnect...');
 					setupSSE(activeEmail.address);
 				}
 			}, 5000);
@@ -99,14 +162,40 @@
 	}
 
 	$effect(() => {
-		if (activeEmail) {
-			// Setup SSE connection
+		const emailAddress = activeEmail?.address;
+		
+		console.log('[MessageList] Effect triggered:', {
+			activeEmail: $state.snapshot(activeEmail),
+			emailAddress,
+			currentEmailAddress,
+			hasActiveEmail: !!activeEmail
+		});
+		
+		// Only setup if email address actually changed
+		if (emailAddress && emailAddress !== currentEmailAddress) {
+			console.log('[MessageList] Setting up for:', emailAddress);
+			currentEmailAddress = emailAddress;
 			isLoading = true;
-			setupSSE(activeEmail.address);
-		} else {
-			// Cleanup
+			
+			// Primary: Use fetchMessages immediately
+			fetchMessages();
+			
+			// Setup auto refresh every 10 seconds
+			setupAutoRefresh();
+			
+			// Secondary: Try SSE for real-time updates (optional)
+			setupSSE(emailAddress);
+		} else if (!emailAddress && currentEmailAddress) {
+			// Cleanup when no email is selected
+			console.log('[MessageList] Cleaning up');
+			currentEmailAddress = null;
 			messages = [];
 			isConnected = false;
+			
+			// Clear auto refresh
+			clearAutoRefresh();
+			
+			// Close SSE
 			if (eventSource) {
 				eventSource.close();
 				eventSource = null;
@@ -115,6 +204,7 @@
 
 		// Cleanup on unmount
 		return () => {
+			clearAutoRefresh();
 			if (eventSource) {
 				eventSource.close();
 				eventSource = null;
@@ -141,7 +231,7 @@
 	}
 </script>
 
-<Card class="h-full bg-white dark:bg-slate-950 flex flex-col border-slate-200 dark:border-slate-800">
+<Card class="h-full border-border bg-card flex flex-col">
 	<CardHeader class="border-b border-slate-200 dark:border-slate-800 p-6">
 		<div class="flex items-center justify-between mb-2">
 			<div class="flex items-center gap-2">
@@ -155,13 +245,14 @@
 			</div>
 			<Button
 				size="sm"
-				variant="ghost"
-				class="h-8 w-8 p-0"
+				variant="default"
+				class="h-8 p-0 w-fit"
 				onclick={handleRefresh}
 				disabled={isLoading}
-				title="Refresh messages (Real-time updates via SSE)"
+				title="Refresh messages"
 			>
 				<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
+				Refresh
 			</Button>
 		</div>
 		{#if activeEmail}

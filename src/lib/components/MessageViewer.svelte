@@ -2,69 +2,71 @@
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import type { EmailLog } from '$lib/types';
 	import { Mail } from 'lucide-svelte';
+	import ScrollArea from './ui/scroll-area/scroll-area.svelte';
 
 	let { message }: { message: EmailLog | null } = $props();
 
 	function getSender(from: EmailLog['from']): string {
 		if (typeof from === 'string') return from;
 		if (from && typeof from === 'object') {
-			return (from as any).name || (from as any).address || 'Tidak diketahui';
+			return (from as any).name || (from as any).address || 'Unknown';
 		}
-		return 'Tidak diketahui';
+		return 'Unknown';
 	}
 
 	function formatDate(date: string): string {
-		return new Date(date).toLocaleString('id-ID', {
-			year: 'numeric',
-			month: '2-digit',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		return new Date(date).toLocaleString();
 	}
 </script>
 
 {#if message}
-	<Card class="h-full bg-white dark:bg-slate-950 flex flex-col border-slate-200 dark:border-slate-800">
-		<CardHeader class="border-b border-slate-200 dark:border-slate-800 p-6 flex-shrink-0">
-			<div class="flex items-start justify-between gap-4 mb-4">
-				<div class="flex-1 min-w-0">
-					<CardTitle class="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-						{message.subject}
-					</CardTitle>
-					<CardDescription class="text-sm text-slate-600 dark:text-slate-400">
-						From: {getSender(message.from)}
-					</CardDescription>
-				</div>
-				<span class="text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-					{formatDate(message.date)}
-				</span>
-			</div>
+	<Card class="border-border bg-card">
+		<CardHeader>
+			<CardTitle class="text-card-foreground line-clamp-1">{message.subject}</CardTitle>
+			<CardDescription class="text-muted-foreground">From: {getSender(message.from)}</CardDescription>
 		</CardHeader>
-
-		<CardContent class="flex-1 overflow-y-auto p-6 min-h-0">
-			<div class="prose prose-sm dark:prose-invert max-w-none h-full">
-				{#if message.html}
-					<iframe
-						title="Email Content"
-						srcdoc={message.html}
-						class="w-full h-full border-0"
-					></iframe>
-				{:else if message.text}
-					<p class="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-						{message.text}
-					</p>
-				{:else}
-					<p class="text-slate-500 dark:text-slate-400 italic">No content available</p>
-				{/if}
+		<CardContent class="p-0">
+			<div class="h-[400px] overflow-y-auto">
+				<div class="p-6 space-y-4">
+					<div class="flex items-center justify-between text-xs text-muted-foreground pb-4 border-b border-border">
+						<span>To: You</span>
+						<span>{formatDate(message.date)}</span>
+					</div>
+					<div class="prose prose-sm max-w-none text-card-foreground">
+						{#if message.html}
+							<div class="w-full">
+								<iframe
+									title="Email Content"
+									srcdoc={message.html}
+									class="w-full min-h-[300px] border-0"
+									sandbox="allow-same-origin allow-scripts"
+								></iframe>
+							</div>
+						{:else if message.text}
+							<pre class="whitespace-pre-wrap font-sans text-sm leading-relaxed">{message.text}</pre>
+						{:else}
+							<p class="text-muted-foreground italic">No content available</p>
+						{/if}
+					</div>
+				</div>
 			</div>
 		</CardContent>
 	</Card>
 {:else}
-	<Card class="h-full bg-white dark:bg-slate-950 flex items-center justify-center border-slate-200 dark:border-slate-800">
-		<div class="text-center">
-			<Mail class="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-			<p class="text-slate-500 dark:text-slate-400">Select an email to read</p>
-		</div>
+	<Card class="border-border bg-card">
+		<CardHeader>
+			<CardTitle class="flex items-center gap-2 text-card-foreground">
+				<Mail class="h-5 w-5 text-primary" />
+				Message
+			</CardTitle>
+			<CardDescription class="text-muted-foreground">Select a message to read</CardDescription>
+		</CardHeader>
+		<CardContent>
+			<div class="flex flex-col items-center justify-center h-[400px] text-center">
+				<Mail class="h-12 w-12 text-muted-foreground/50 mb-3" />
+				<p class="text-sm text-muted-foreground">No message selected</p>
+				<p class="text-xs text-muted-foreground mt-1">Click on a message from the inbox to read it</p>
+			</div>
+		</CardContent>
 	</Card>
 {/if}

@@ -4,9 +4,10 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import type { TempEmail } from '$lib/types';
-	import { Plus } from 'lucide-svelte';
+	import { Mail, RefreshCw, Copy, Plus } from 'lucide-svelte';
 	import { createEventDispatcher } from 'svelte';
     import { toast } from 'svelte-sonner';
+	import Label from './ui/label/label.svelte';
 
 	let { emails }: { emails: TempEmail[] } = $props();
 
@@ -14,113 +15,155 @@
 		emailGenerated: TempEmail;
 	}>();
 
-	// Available domains - Tambahkan domain baru di sini
-	const availableDomains = [
-		{ value: 'beanbill.online', label: 'beanbill.online' },
-		{ value: 'beanbill.my.id', label: 'beanbill.my.id' },
-		{ value: 'badcode.biz.id', label: 'badcode.biz.id' },
-		{ value: 'malink.my.id', label: 'malink.my.id' },
-		{ value: 'barberin.my.id', label: 'barberin.my.id' }
+	// Available domains
+	const DOMAINS = ["beanbill.online", "beanbill.my.id", "badcode.biz.id", "malink.my.id", "barberin.my.id"];
+	
+	const RANDOM_PREFIXES = ["user", "temp", "guest", "demo", "test", "random", "quick", "fast", "cool", "smart"];
+	const RANDOM_NAMES = [
+		"alpha", "beta", "gamma", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet",
+		"kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango"
 	];
 
-	let newPrefix = $state('');
-	let selectedDomain = $state(availableDomains[0].value);
+	let prefix = $state('');
+	let selectedDomain = $state(DOMAINS[0]);
+	let generatedEmail = $state('');
 
 	const triggerContent = $derived(
-		availableDomains.find((d) => d.value === selectedDomain)?.label ?? 'Select Domain'
+		DOMAINS.find((d) => d === selectedDomain) ?? 'Select Domain'
 	);
 
-	function generateEmail() {
-		if (!newPrefix.trim()) {
-			toast.error('Error', {
-				description: 'Please enter an email prefix'
-			});
-			return;
-		}
+	function generateRandomPrefix() {
+		const randomPrefix = RANDOM_PREFIXES[Math.floor(Math.random() * RANDOM_PREFIXES.length)];
+		const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+		const randomNumber = Math.floor(Math.random() * 9999);
+		return `${randomPrefix}_${randomName}${randomNumber}`;
+	}
 
-		const emailAddress = `${newPrefix.trim()}@${selectedDomain}`;
-
-		if (emails.some((email) => email.address === emailAddress)) {
+	function handleGenerateEmail() {
+		const emailPrefix = prefix || generateRandomPrefix();
+		const email = `${emailPrefix}@${selectedDomain}`;
+		
+		if (emails.some((e) => e.address === email)) {
 			toast.error('Error', {
 				description: 'This email address already exists'
 			});
 			return;
 		}
 
+		generatedEmail = email;
+		prefix = emailPrefix;
+
 		const newEmail: TempEmail = {
-			id: emailAddress,
-			address: emailAddress,
-			prefix: newPrefix.trim(),
+			id: email,
+			address: email,
+			prefix: emailPrefix,
 			createdAt: new Date(),
 			messages: []
 		};
 
 		dispatch('emailGenerated', newEmail);
-		newPrefix = '';
 
-		toast.success('Success', {
-			description: `Email ${emailAddress} created successfully!`
+		toast.success('Email Generated!', {
+			description: 'Your temporary email is ready to use.'
 		});
+	}
+
+	let processing = $state(false);
+
+	function handleRandomize() {
+		processing = true;
+		setTimeout(() => {
+			const randomPrefix = generateRandomPrefix();
+			prefix = randomPrefix;
+			processing = false;
+		}, 1000);
+	}
+
+	async function handleCopyEmail() {
+		if (generatedEmail) {
+			await navigator.clipboard.writeText(generatedEmail);
+			toast.success('Copied!', {
+				description: 'Email address copied to clipboard.'
+			});
+		}
 	}
 </script>
 
-<Card class="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+<Card class="border-border bg-card">
 	<CardHeader>
-		<CardTitle class="flex items-center gap-2">
-			<Plus class="w-5 h-5 text-blue-600 dark:text-blue-400" />
-			Generate Email
+		<CardTitle class="flex items-center gap-2 text-card-foreground">
+			<Mail class="h-5 w-5 text-primary" />
+			Generate Email Address
 		</CardTitle>
-		<CardDescription>Create a new temporary email address</CardDescription>
+		<CardDescription class="text-muted-foreground">
+			Create your temporary email address in seconds
+		</CardDescription>
 	</CardHeader>
 	<CardContent class="space-y-4">
-		<div class="space-y-3">
-			<!-- Domain Selector -->
+		<div class="grid gap-4 md:grid-cols-2">
 			<div class="space-y-2">
-				<label for="emailDomainLabel" class="text-sm font-medium text-slate-700 dark:text-slate-300">Domain</label>
-				<Select.Root type="single" name="emailDomain" bind:value={selectedDomain}>
-					<Select.Trigger id="emailDomainLabel" class="w-full">
-						{triggerContent}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							<Select.Label>Available Domains</Select.Label>
-							{#each availableDomains as domain (domain.value)}
-								<Select.Item
-									value={domain.value}
-									label={domain.label}
-								>
-									{domain.label}
-								</Select.Item>
-							{/each}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-			</div>
-
-			<!-- Prefix Input -->
-			<div class="space-y-2">
-				<label for="emailPrefixLabel" class="text-sm font-medium text-slate-700 dark:text-slate-300">Email Prefix</label>
+				<Label for="prefix">Email Prefix</Label>
 				<div class="flex gap-2">
 					<Input
-						placeholder="Enter prefix"
-						bind:value={newPrefix}
-						onkeypress={(e: KeyboardEvent) => e.key === 'Enter' && generateEmail()}
-						class="flex-1 text-sm"
-						id="emailPrefixLabel"
+						id="prefix"
+						placeholder="Enter prefix or leave empty"
+						bind:value={prefix}
+						class="border-border text-foreground placeholder:text-muted-foreground"
 					/>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						onclick={handleRandomize}
+						class="shrink-0 border-border hover:bg-accent hover:text-accent-foreground bg-transparent"
+					>
+						<RefreshCw class="h-4 w-4 {processing ? 'animate-spin' : ''}" />
+					</Button>
 				</div>
 			</div>
 
-			<!-- Email Preview -->
-			<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
-				<span class="flex-1 truncate">{newPrefix || "prefix"}</span>
-				<span>@{selectedDomain}</span>
+			<div class="space-y-2">
+				<Label for="domain">Domain</Label>
+				<Select.Root type="single" bind:value={selectedDomain}>
+					<Select.Trigger id="domain" class="border-border w-full">
+						{triggerContent}
+					</Select.Trigger>
+					<Select.Content class="bg-popover border-border">
+						{#each DOMAINS as domain}
+							<Select.Item value={domain} class="text-foreground">
+								{domain}
+							</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
-
-			<!-- Generate Button -->
-			<Button onclick={generateEmail} class="w-full bg-blue-600 hover:bg-blue-700 text-white">
-				Generate Email
-			</Button>
 		</div>
+
+		<Button
+			onclick={handleGenerateEmail}
+			class="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+			size="lg"
+		>
+			Generate Email
+		</Button>
+
+		{#if generatedEmail}
+			<div class="rounded-lg border border-border bg-muted p-4 space-y-2">
+				<Label class="text-sm font-medium text-muted-foreground">Your Temporary Email</Label>
+				<div class="flex items-center gap-2">
+					<code class="flex-1 rounded bg-background px-3 py-2 text-sm font-mono text-foreground border border-border">
+						{generatedEmail}
+					</code>
+					<Button
+						variant="outline"
+						size="icon"
+						onclick={handleCopyEmail}
+						class="shrink-0 border-border hover:bg-accent hover:text-accent-foreground bg-transparent"
+					>
+						<Copy class="h-4 w-4" />
+					</Button>
+				</div>
+			</div>
+		{/if}
 	</CardContent>
 </Card> 

@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "tempmail",
+      "name": "beanmail",
       "dependencies": {
         "cloudflare": "^4.4.1",
         "lucide-svelte": "^0.525.0",
