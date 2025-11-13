@@ -1,11 +1,21 @@
 import { type RequestHandler } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import {
-	CLOUDFLARE_ACCOUNT_ID,
-	DATABASE_ID,
-	CLOUDFLARE_API_TOKEN,
-	REDIS_URL
-} from '$env/static/private';
+
+// Dynamically import environment variables to avoid build errors
+let envVars: any = {};
+try {
+	const env = await import('$env/static/private');
+	envVars = env;
+} catch (e) {
+	console.log('[Redis SSE] Environment variables not available during build');
+}
+
+const { 
+	CLOUDFLARE_ACCOUNT_ID, 
+	DATABASE_ID, 
+	CLOUDFLARE_API_TOKEN, 
+	REDIS_URL 
+} = envVars;
 
 // Email validation function
 function isValidEmail(email: string): boolean {

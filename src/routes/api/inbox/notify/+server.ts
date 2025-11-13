@@ -1,6 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { REDIS_URL } from '$env/static/private';
 
 // Email validation function
 function isValidEmail(email: string): boolean {
@@ -19,6 +18,25 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Email validation
 		if (!email || !isValidEmail(email)) {
 			return json({ error: 'Invalid email format' }, { status: 400 });
+		}
+
+		// Dynamically import environment variables to avoid build errors
+		let REDIS_URL: string | undefined;
+		try {
+			const env = await import('$env/static/private');
+			REDIS_URL = env.REDIS_URL;
+		} catch (e) {
+			console.log('[Redis Notify] Environment variables not available during build');
+		}
+
+		// Only proceed with Redis if REDIS_URL is configured
+		if (!REDIS_URL) {
+			console.log('[Redis Notify] REDIS_URL not configured, skipping notification');
+			return json({ 
+				success: true, 
+				message: 'Notification skipped (Redis not configured)',
+				email
+			});
 		}
 
 		// Import Redis client dynamically
