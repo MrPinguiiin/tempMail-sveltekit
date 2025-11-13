@@ -80,26 +80,28 @@
 	<main class="container mx-auto px-4 py-6 md:py-8">
 		<div class="mx-auto max-w-6xl space-y-6">
 			<!-- Hero Section -->
-			<div class="text-center space-y-3">
-				<h2 class="text-3xl md:text-4xl font-bold text-balance text-foreground">Temporary Email Address</h2>
-				<p class="text-muted-foreground text-balance max-w-2xl mx-auto">
-					Generate a disposable email address instantly. Protect your privacy and avoid spam with our temporary
-					email service.
+			<div class="text-center space-y-6 py-8 md:py-12">
+				<div class="inline-flex items-center justify-center rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary mb-4">
+					<span>No Registration Required • Completely Free</span>
+				</div>
+				<h2 class="text-4xl md:text-5xl font-bold text-balance text-foreground">Secure Temporary Email</h2>
+				<p class="text-lg text-muted-foreground text-balance max-w-2xl mx-auto">
+					Protect your privacy with disposable email addresses. Get started instantly - no signup or personal information required.
 				</p>
+				<div class="flex flex-col sm:flex-row justify-center gap-4 mt-6">
+					<div class="flex items-center justify-center gap-2 text-muted-foreground">
+						<div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+						<span>Emails delivered in real-time</span>
+					</div>
+					<div class="flex items-center justify-center gap-2 text-muted-foreground">
+						<div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+						<span>Auto-delete after 1 hour</span>
+					</div>
+				</div>
 			</div>
 
 			<!-- Email Generator -->
 			<EmailGenerator {emails} on:emailGenerated={handleEmailGenerated} />
-
-			<!-- Email List -->
-			<!-- {#if emails.length > 0}
-				<EmailList
-					{emails}
-					activeEmail={activeEmailId}
-					on:emailSelect={handleEmailSelect}
-					on:emailDelete={handleEmailDelete}
-				/>
-			{/if} -->
 
 			<!-- Inbox and Message Reader -->
 			{#if activeEmailId}
@@ -115,11 +117,4 @@
 			{/if}
 		</div>
 	</main>
-
-	<!-- Footer -->
-	<!-- <footer class="absolute bottom-0 w-full border-t border-border bg-card py-6">
-		<div class="container mx-auto px-4 text-center text-sm text-muted-foreground">
-			<p>© 2025 BeanMail. Temporary email service for privacy protection.</p>
-		</div>
-	</footer> -->
 </div>

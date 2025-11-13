@@ -20,8 +20,8 @@
 	
 	const RANDOM_PREFIXES = ["user", "temp", "guest", "demo", "test", "random", "quick", "fast", "cool", "smart"];
 	const RANDOM_NAMES = [
-		"alpha", "beta", "gamma", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet",
-		"kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango"
+		"alex", "morgan", "jamie", "casey", "taylor", "jordan", "avery", "quinn", "cameron", "riley",
+		"skyler", "rowan", "charlie", "harper", "blake", "reed", "shannon", "phoenix", "justice", "kendall"
 	];
 
 	let prefix = $state('');
@@ -33,10 +33,9 @@
 	);
 
 	function generateRandomPrefix() {
-		const randomPrefix = RANDOM_PREFIXES[Math.floor(Math.random() * RANDOM_PREFIXES.length)];
 		const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 		const randomNumber = Math.floor(Math.random() * 9999);
-		return `${randomPrefix}_${randomName}${randomNumber}`;
+		return `${randomName}${randomNumber}`;
 	}
 
 	function handleGenerateEmail() {
