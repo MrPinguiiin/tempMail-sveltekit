@@ -69,7 +69,7 @@
 					<Mail class="h-5 w-5 text-primary-foreground" />
 				</div>
 				<div>
-					<h1 class="text-xl font-bold text-foreground">BeanMail</h1>
+					<h1 class="text-xl font-bold text-foreground">MailHog</h1>
 					<p class="text-xs text-muted-foreground">Temporary Email Service</p>
 				</div>
 			</div>

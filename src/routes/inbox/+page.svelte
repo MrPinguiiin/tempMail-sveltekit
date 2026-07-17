@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
   
-    let tempEmail = "anjayani@beanbill.online";
+    let tempEmail = "anjayani@mailhog.online";
     let inbox: any[] = [];
     let interval: number | null = null;
     
