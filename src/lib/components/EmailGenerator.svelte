@@ -16,7 +16,7 @@
 	}>();
 
 	// Available domains
-	const DOMAINS = ["mailhog.online", "mailhog.my.id", "badcode.biz.id", "malink.my.id", "barberin.my.id"];
+	const DOMAINS = ["beanbill.online", "beanbill.my.id", "badcode.biz.id", "malink.my.id", "barberin.my.id"];
 	
 	const RANDOM_PREFIXES = ["user", "temp", "guest", "demo", "test", "random", "quick", "fast", "cool", "smart"];
 	const RANDOM_NAMES = [

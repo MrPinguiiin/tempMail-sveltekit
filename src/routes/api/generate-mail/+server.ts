@@ -3,15 +3,15 @@ import { json } from '@sveltejs/kit';
 export function GET({ url }) {
 	// Daftar domain yang allowed - Tambahkan domain baru di sini
 	const allowedDomains = [
-		'mailhog.online',
-		'mailhog.my.id',
+		'beanbill.online',
+		'beanbill.my.id',
 		'barberin.my.id',
 		'badcode.biz.id',
 		'malink.my.id'
 	];
 
 	// Ambil domain dari query parameter atau default
-	const domain = url.searchParams.get('domain') || 'mailhog.online';
+	const domain = url.searchParams.get('domain') || 'beanbill.online';
 
 	// Validate domain
 	if (!allowedDomains.includes(domain)) {
