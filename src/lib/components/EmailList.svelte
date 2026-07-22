@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import type { TempEmail } from '$lib/types';
 	import { Copy, Trash2, Mail } from 'lucide-svelte';
 	import { createEventDispatcher } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import Badge from './ui/badge/badge.svelte';
 
 	let {
 		emails,
@@ -24,9 +22,7 @@
 
 	function copyToClipboard(text: string) {
 		navigator.clipboard.writeText(text);
-		toast.success('Copied', {
-			description: 'Email address copied to clipboard'
-		});
+		toast.success('Copied', { description: 'Email address copied to clipboard' });
 	}
 
 	async function fetchMessageCount(address: string) {
@@ -49,73 +45,66 @@
 	});
 </script>
 
-<Card class="border-border bg-card">
-	<CardHeader>
-		<div class="flex items-center justify-between">
-			<CardTitle class="flex items-center gap-2">
-				<Mail class="h-5 w-5 text-primary" />
-				Your Emails
-			</CardTitle>
-			<Badge variant="secondary" class="text-xs">
-				{emails.length} active
-			</Badge>
+<div class="p-5">
+	<div class="mb-4 flex items-center justify-between">
+		<div class="flex items-center gap-2">
+			<Mail class="h-5 w-5 text-black" />
+			<h3 class="font-['Schibsted_Grotesk'] text-base font-semibold text-black">Your Emails</h3>
 		</div>
-		<CardDescription class="text-muted-foreground">
-			Select an email to view its inbox
-		</CardDescription>
-	</CardHeader>
-	<CardContent>
-		<div class="space-y-2">
-			{#each emails as email (email.id)}
-				<div
-					onclick={() => dispatch('emailSelect', email.id)}
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							dispatch('emailSelect', email.id);
-						}
-					}}
-					role="button"
-					tabindex="0"
-					class="p-3 rounded-lg cursor-pointer transition-all border {
-						activeEmail === email.id
-							? 'bg-accent border-border'
-							: 'bg-muted border-border hover:bg-accent/50'
-					}"
-				>
-					<div class="flex items-start justify-between gap-2 mb-2">
-						<div class="flex-1 min-w-0">
-							<p class="text-sm font-medium text-card-foreground truncate">{email.address}</p>
-							<p class="text-xs text-muted-foreground">
-								{messageCounts[email.address] || 0} message{messageCounts[email.address] !== 1 ? "s" : ""}
-							</p>
-						</div>
-					</div>
-					<div class="flex gap-1">
-						<Button
-							size="sm"
-							variant="ghost"
-							class="h-7 w-7 p-0"
-							onclick={(e: MouseEvent) => {
-								e.stopPropagation();
-								copyToClipboard(email.address);
-							}}
-						>
-							<Copy class="w-3.5 h-3.5" />
-						</Button>
-						<Button
-							size="sm"
-							variant="ghost"
-							class="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-							onclick={(e: MouseEvent) => {
-								e.stopPropagation();
-								dispatch('emailDelete', email.id);
-							}}
-						>
-							<Trash2 class="w-3.5 h-3.5" />
-						</Button>
+		<span class="rounded-full bg-[#f8f8f8] px-2.5 py-0.5 font-['Inter'] text-xs text-[#505050]">
+			{emails.length} active
+		</span>
+	</div>
+	<p class="mb-4 font-['Inter'] text-xs text-[#505050]">Select an email to view its inbox</p>
+
+	<div class="space-y-2">
+		{#each emails as email (email.id)}
+			<div
+				onclick={() => dispatch('emailSelect', email.id)}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') dispatch('emailSelect', email.id);
+				}}
+				role="button"
+				tabindex="0"
+				class="cursor-pointer rounded-xl border p-3 transition-all {
+					activeEmail === email.id
+						? 'border-black/20 bg-[#f8f8f8]'
+						: 'border-black/5 bg-white hover:bg-[#f8f8f8]'
+				}"
+			>
+				<div class="mb-2 flex items-start justify-between gap-2">
+					<div class="min-w-0 flex-1">
+						<p class="truncate font-['Inter'] text-sm font-medium text-black">{email.address}</p>
+						<p class="font-['Inter'] text-xs text-[#505050]">
+							{messageCounts[email.address] || 0} message{messageCounts[email.address] !== 1 ? 's' : ''}
+						</p>
 					</div>
 				</div>
-			{/each}
-		</div>
-	</CardContent>
-</Card> 
+				<div class="flex gap-1">
+					<Button
+						size="sm"
+						variant="ghost"
+						class="h-7 w-7 p-0 text-[#505050] hover:bg-black/5 hover:text-black"
+						onclick={(e: MouseEvent) => {
+							e.stopPropagation();
+							copyToClipboard(email.address);
+						}}
+					>
+						<Copy class="h-3.5 w-3.5" />
+					</Button>
+					<Button
+						size="sm"
+						variant="ghost"
+						class="h-7 w-7 p-0 text-red-500 hover:bg-red-50 hover:text-red-600"
+						onclick={(e: MouseEvent) => {
+							e.stopPropagation();
+							dispatch('emailDelete', email.id);
+						}}
+					>
+						<Trash2 class="h-3.5 w-3.5" />
+					</Button>
+				</div>
+			</div>
+		{/each}
+	</div>
+</div>

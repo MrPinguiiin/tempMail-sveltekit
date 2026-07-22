@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import type { EmailLog, TempEmail } from '$lib/types';
 	import { RefreshCw } from 'lucide-svelte';
 	import { createEventDispatcher } from 'svelte';
@@ -19,9 +18,8 @@
 	let isLoading = $state(false);
 	let eventSource: EventSource | null = $state(null);
 	let isConnected = $state(false);
-
 	let currentEmailAddress = $state<string | null>(null);
-	let refreshInterval: NodeJS.Timeout | null = $state(null);
+	let refreshInterval: ReturnType<typeof setInterval> | null = $state(null);
 
 	async function fetchMessages() {
 		const emailToFetch = activeEmail;
@@ -39,14 +37,8 @@
 					'Pragma': 'no-cache'
 				}
 			});
-			
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error('Gagal mengambil pesan inbox.');
-			}
-			
-			const newMessages = await response.json() as EmailLog[];
-			messages = newMessages;
+			if (!response.ok) throw new Error('Gagal mengambil pesan inbox.');
+			messages = await response.json() as EmailLog[];
 		} catch (e) {
 			console.error('[MessageList] Error fetching messages:', e);
 		} finally {
@@ -59,20 +51,13 @@
 		fetchMessages();
 	}
 
-	
-
 	function setupAutoRefresh() {
-		// Only clear if we don't have an interval or it's for a different email
 		if (refreshInterval) {
 			clearInterval(refreshInterval);
 			refreshInterval = null;
 		}
-
-		// Setup new interval for auto refresh every 5 seconds
 		refreshInterval = setInterval(() => {
-			if (activeEmail && !isLoading) {
-				fetchMessages();
-			}
+			if (activeEmail && !isLoading) fetchMessages();
 		}, 5000);
 	}
 
@@ -84,22 +69,13 @@
 	}
 
 	function setupSSE(email: string) {
-		// Close existing connection if any
 		if (eventSource) {
 			eventSource.close();
 			eventSource = null;
 		}
 
-		// Create new SSE connection using Redis
-		const sseUrl = `/api/inbox/redis-stream?email=${encodeURIComponent(email)}`;
-		
-		eventSource = new EventSource(sseUrl);
+		eventSource = new EventSource(`/api/inbox/redis-stream?email=${encodeURIComponent(email)}`);
 
-		eventSource.onopen = () => {
-			// Don't set isConnected to true here, let heartbeat determine it
-		};
-		
-		// Add timeout for connection
 		setTimeout(() => {
 			if (eventSource && eventSource.readyState === EventSource.CONNECTING) {
 				eventSource.close();
@@ -111,34 +87,20 @@
 		eventSource.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
-				
 				if (data.type === 'update') {
 					messages = data.emails;
 					isLoading = false;
-					
-					// Update connection status based on source
-					if (data.source === 'redis') {
-						isConnected = true;
-					} else if (data.source === 'polling') {
-						isConnected = false;
-					}
-				} else if (data.type === 'heartbeat') {
-					// Update connection status based on heartbeat
-					if (data.redisConnected !== undefined) {
-						isConnected = data.redisConnected;
-					}
-				} else if (data.type === 'error') {
-					console.error('[Redis SSE] Server error:', data.message);
+					isConnected = data.source === 'redis';
+				} else if (data.type === 'heartbeat' && data.redisConnected !== undefined) {
+					isConnected = data.redisConnected;
 				}
 			} catch (e) {
 				console.error('[Redis SSE] Error parsing message:', e);
 			}
 		};
 
-		eventSource.onerror = (error) => {
+		eventSource.onerror = () => {
 			isConnected = false;
-			
-			// Attempt to reconnect after 5 seconds
 			setTimeout(() => {
 				if (activeEmail && activeEmail.address === currentEmailAddress) {
 					setupSSE(activeEmail.address);
@@ -147,56 +109,33 @@
 		};
 	}
 
-	// Listen for refreshInbox event
 	$effect(() => {
 		const handleRefreshInbox = () => {
-			if (activeEmail) {
-				fetchMessages();
-			}
+			if (activeEmail) fetchMessages();
 		};
-
 		window.addEventListener('refreshInbox', handleRefreshInbox);
-		
-		return () => {
-			window.removeEventListener('refreshInbox', handleRefreshInbox);
-		};
+		return () => window.removeEventListener('refreshInbox', handleRefreshInbox);
 	});
 
 	$effect(() => {
 		const emailAddress = activeEmail?.address;
-		
-		// Only setup if email address actually changed
 		if (emailAddress && emailAddress !== currentEmailAddress) {
 			currentEmailAddress = emailAddress;
 			isLoading = true;
-			
-			// Primary: Use fetchMessages immediately
 			fetchMessages();
-			
-			// Setup auto refresh every 5 seconds (faster for testing)
 			setupAutoRefresh();
-			
-			// Secondary: Try SSE for real-time updates (optional)
 			setupSSE(emailAddress);
 		} else if (!emailAddress && currentEmailAddress) {
-			// Cleanup when no email is selected
 			currentEmailAddress = null;
 			messages = [];
 			isConnected = false;
-			
-			// Clear auto refresh
 			clearAutoRefresh();
-			
-			// Close SSE
 			if (eventSource) {
 				eventSource.close();
 				eventSource = null;
 			}
 		}
-
-		// Cleanup on unmount
 		return () => {
-			// Don't clear auto refresh here, only clear on component unmount
 			if (eventSource) {
 				eventSource.close();
 				eventSource = null;
@@ -204,19 +143,16 @@
 		};
 	});
 
-	// Cleanup on component unmount
 	$effect(() => {
-		return () => {
-			clearAutoRefresh();
-		};
+		return () => clearAutoRefresh();
 	});
 
 	function getSender(from: EmailLog['from']): string {
 		if (typeof from === 'string') return from;
 		if (from && typeof from === 'object') {
-			return (from as any).name || (from as any).address || 'Tidak diketahui';
+			return (from as any).name || (from as any).address || 'Unknown';
 		}
-		return 'Tidak diketahui';
+		return 'Unknown';
 	}
 
 	function formatTime(date: string): string {
@@ -230,85 +166,71 @@
 	}
 </script>
 
-<Card class="h-full border-border bg-card flex flex-col">
-	<CardHeader class="border-b border-slate-200 dark:border-slate-800 p-6">
-		<div class="flex items-center justify-between mb-2">
+<div class="flex h-full flex-col">
+	<div class="border-b border-black/5 p-5">
+		<div class="mb-2 flex items-center justify-between">
 			<div class="flex items-center gap-2">
-				<CardTitle class="text-slate-900 dark:text-white">Inbox</CardTitle>
+				<h3 class="font-['Schibsted_Grotesk'] text-base font-semibold text-black">Inbox</h3>
 				{#if isConnected}
-					<span class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-						<span class="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
-						Redis Live
+					<span class="flex items-center gap-1 font-['Inter'] text-xs text-green-600">
+						<span class="h-2 w-2 animate-pulse rounded-full bg-green-500"></span>
+						Live
 					</span>
 				{:else}
-					<span class="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-						<span class="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-pulse"></span>
+					<span class="flex items-center gap-1 font-['Inter'] text-xs text-blue-600">
+						<span class="h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
 						Polling
 					</span>
 				{/if}
 			</div>
-			<div class="flex gap-2">
-				<Button
-					size="sm"
-					variant="default"
-					class="h-8 p-0 w-fit"
-					onclick={handleRefresh}
-					disabled={isLoading}
-					title="Refresh messages"
-				>
-					<RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
-					Refresh
-				</Button>
-			</div>
+			<Button
+				size="sm"
+				class="h-8 gap-1.5 bg-black text-white hover:bg-black/90"
+				onclick={handleRefresh}
+				disabled={isLoading}
+			>
+				<RefreshCw class="h-3.5 w-3.5 {isLoading ? 'animate-spin' : ''}" />
+				Refresh
+			</Button>
 		</div>
 		{#if activeEmail}
-			<CardDescription class="text-slate-500 dark:text-slate-400 truncate">
-				{activeEmail.address}
-			</CardDescription>
+			<p class="truncate font-['Inter'] text-xs text-[#505050]">{activeEmail.address}</p>
 		{/if}
-	</CardHeader>
+	</div>
 
-	<CardContent class="flex-1 overflow-y-auto p-0">
+	<div class="flex-1 overflow-y-auto">
 		{#if isLoading && messages.length === 0}
-			<div class="flex items-center justify-center h-full text-slate-500 dark:text-slate-400">
-				<p class="text-sm">Loading messages...</p>
+			<div class="flex h-32 items-center justify-center">
+				<p class="font-['Inter'] text-sm text-[#505050]">Loading messages...</p>
 			</div>
 		{:else if messages.length === 0}
-			<div class="flex items-center justify-center h-full text-slate-500 dark:text-slate-400">
-				<p class="text-sm">No messages yet</p>
+			<div class="flex h-32 items-center justify-center">
+				<p class="font-['Inter'] text-sm text-[#505050]">No messages yet</p>
 			</div>
 		{:else}
-			<div class="divide-y divide-slate-200 dark:divide-slate-800">
+			<div class="divide-y divide-black/5">
 				{#each messages as message (message.id)}
 					<div
 						onclick={() => dispatch('messageSelect', message)}
 						onkeydown={(e) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								dispatch('messageSelect', message);
-							}
+							if (e.key === 'Enter' || e.key === ' ') dispatch('messageSelect', message);
 						}}
 						role="button"
 						tabindex="0"
-						class="p-4 cursor-pointer transition-colors border-l-2 {
+						class="cursor-pointer border-l-2 p-4 transition-colors {
 							selectedMessage?.id === message.id
-								? 'bg-blue-50 dark:bg-blue-900/20 border-l-blue-600'
-								: 'bg-white dark:bg-slate-950 border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-900'
+								? 'border-l-black bg-[#f8f8f8]'
+								: 'border-l-transparent hover:bg-[#f8f8f8]'
 						}"
 					>
-						<div class="flex items-start justify-between gap-2 mb-1">
-							<p class="font-medium text-slate-900 dark:text-white text-sm">
-								{getSender(message.from)}
-							</p>
-							<span class="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-								{formatTime(message.date)}
-							</span>
+						<div class="mb-1 flex items-start justify-between gap-2">
+							<p class="font-['Inter'] text-sm font-medium text-black">{getSender(message.from)}</p>
+							<span class="whitespace-nowrap font-['Inter'] text-xs text-[#505050]">{formatTime(message.date)}</span>
 						</div>
-						<p class="text-sm text-slate-600 dark:text-slate-400 truncate">
-							{message.subject}
-						</p>
+						<p class="truncate font-['Inter'] text-sm text-[#505050]">{message.subject}</p>
 					</div>
 				{/each}
 			</div>
 		{/if}
-	</CardContent>
-</Card>
+	</div>
+</div>
